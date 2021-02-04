@@ -11,10 +11,10 @@
   </head>
   <body>
     <div id="qunit"></div>
-    <div id="qunit-fioxture"></div>
+    <div id="qunit-fixture"></div>
     <script src="https://code.jquery.com/qunit/qunit-2.14.0.js"></script>
     <script>
-      QUnit.module('Domain', function() {
+      QUnit.module('ActionQueue', function() {
         // A non-cancelable promise that resolves after some time.
         function TimedPromise(time, reject_time) {
           return new Promise(function(resolve, reject){
