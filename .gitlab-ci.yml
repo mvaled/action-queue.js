@@ -1,0 +1,15 @@
+stages:
+  - test
+
+run all tests:
+  image: node:buster-slim
+  before_script:
+    - npm install --also=dev
+  script:
+    - npm test
+  cache:
+    paths:
+      - node_modules
+  only:
+    - master
+    - merge_requests

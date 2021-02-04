@@ -1,0 +1,29 @@
+{
+  "name": "action-queue",
+  "version": "1.0.0",
+  "description": "A coordinated non-concurrent queue of actions",
+  "main": "src/queue.js",
+  "directories": {
+    "test": "tests"
+  },
+  "devDependencies": {
+    "qunit": "^2.14.0",
+    "underscore": "^1.12.0"
+  },
+  "scripts": {
+    "test": "qunit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.merchise.org/mercurio-2018/action-queue.js"
+  },
+  "keywords": [
+    "concurrency",
+    "coordination",
+    "FIFO",
+    "LIFO",
+    "cancelation"
+  ],
+  "author": "Merchise Autrement",
+  "license": "MIT"
+}
