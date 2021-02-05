@@ -3,25 +3,6 @@ const {ActionQueue} = require('../src/queue.js');
 const {CancelablePromise} = require('./CancelablePromise.js');
 
 function TimedPromise(time, reject_time) {
-    return new Promise(function(resolve, reject){
-        var reject_handler;
-        let resolve_handler = setTimeout(function(){
-            if (typeof reject_time !== "undefined")
-                clearTimeout(reject_handler);
-            resolve();
-        }, time);
-
-        if (typeof reject_time !== "undefined") {
-            reject_handler = setTimeout(function(){
-                reject();
-                clearTimeout(resolve_handler);
-            }, reject_time);
-        }
-    });
-}
-
-// A non-cancelable promise that resolves after some time.
-function CancellableTimedPromise(time, reject_time) {
     return new CancelablePromise(function(resolve, reject, onCancel){
         var reject_handler;
         let resolve_handler = setTimeout(function(){
@@ -137,7 +118,7 @@ QUnit.test('FIFO queue scenario with cancelation', function(assert){
     function action(instance) {
         instances.push(instance);
         console.debug("Called action", instance);
-        let result = CancellableTimedPromise(ACTION_TIME);
+        let result = TimedPromise(ACTION_TIME);
         return result;
     }
 
