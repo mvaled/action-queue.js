@@ -133,6 +133,9 @@
                 this._running = {promise: promise, extra: extra};
                 let self = this;
                 promise.then(function(...result){
+                    if (result.length == 1 && (typeof result[0]) === "undefined") {
+                        result = [];
+                    }
                     let extra = (self._running!==null)?self._running.extra:[];
                     self._running = null;
                     self._thens.forEach(function(fn){
@@ -151,6 +154,9 @@
                     });
                     self._run();
                 }).catch(function(...result){
+                    if (result.length == 1 && (typeof result[0]) === "undefined") {
+                        result = [];
+                    }
                     let extra = (self._running!==null)?self._running.extra:[];
                     self._running = null;
                     self._catchs.forEach(function(fn){
