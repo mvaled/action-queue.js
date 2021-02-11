@@ -22,6 +22,8 @@
             // The queue and current running promise (if any).
             this._queue = [];
             this._running = null;
+
+            this._setup_promise();
         }
 
         /**
@@ -105,6 +107,35 @@
         }
 
         /**
+         * Return a promise that resolves/rejects just as soon as the first
+         * pending action resolves/rejects.
+         *
+         * Cancelations don't affect the promise.  If the running action gets
+         * cancelled midway, this promise will take over on the next action.
+         * If no action is scheduled to be next, we wait.
+         *
+         * The only way this promise is rejected, is if the running action is
+         * rejected.  The only way this promise is resolved, is when the
+         * running action is resolved.
+         *
+         * When the same queue is used several times, calls to promise may
+         * return different promises.
+         */
+        promise() {
+            return this._current_promise;
+        }
+
+        _setup_promise() {
+            let self = this;
+            this._current_promise_resolve = null;
+            this._current_promise_reject = null;
+            this._current_promise = new Promise(function (resolve, reject){
+                self._current_promise_resolve = resolve;
+                self._current_promise_reject = reject;
+            });
+        }
+
+        /**
          * Clear the entire queue.  Cancel pending and running actions.
          */
         clear() {
@@ -137,6 +168,10 @@
                         result = [];
                     }
                     let extra = (self._running!==null)?self._running.extra:[];
+                    if (self._current_promise_resolve !== null) {
+                        self._current_promise_resolve.apply(self, result.concat(extra));
+                    }
+                    self._setup_promise();
                     self._running = null;
                     self._thens.forEach(function(fn){
                         try{
@@ -158,6 +193,10 @@
                         result = [];
                     }
                     let extra = (self._running!==null)?self._running.extra:[];
+                    if (self._current_promise_reject !== null) {
+                        self._current_promise_reject.apply(self, result.concat(extra));
+                    }
+                    self._setup_promise();
                     self._running = null;
                     self._catchs.forEach(function(fn){
                         try{
@@ -188,6 +227,11 @@
          */
         _cancel_running() {
             if (this._running !== null) {
+                // Some promises reject when cancelled, we let's avoid
+                // rejecting the queue's promise in such cases, because our
+                // API states that we won't reject the promise when cancelling
+                // an action.
+                this._current_promise_reject = null;
                 let promise = this._running.promise;
                 try {
                     if (typeof promise.cancel === "function") {

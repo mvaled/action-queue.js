@@ -160,6 +160,66 @@
             }
           }
         });
+
+        QUnit.test('External promise resolves', function(assert){
+            let queue = new ActionQueue();
+            const ACTION_TIME = 50;
+
+            function action(instance) {
+                console.debug("Called action", instance);
+                return TimedPromise(ACTION_TIME);
+            }
+            let done = assert.async();
+            queue.promise().then(done);
+
+            assert.expect(0);
+            queue.promise().catch(function(){
+                assert.ok(false); // this should not be called
+            });
+
+            queue.append(_.partial(action, "resolved"));
+        });
+
+        QUnit.test('External promise rejects', function(assert){
+            let queue = new ActionQueue();
+            const ACTION_TIME = 200;
+
+            function action(instance) {
+                console.debug("Called action", instance);
+                return new Promise((_, reject) => TimedPromise(ACTION_TIME).then(() => reject()));
+            }
+            let done = assert.async();
+
+            assert.timeout(5000);
+            assert.expect(0);
+            queue.promise().then(function(){
+                assert.ok(false);  // this shouldn't be called.
+            });
+
+            queue.promise().catch(done);
+            queue.append(_.partial(action, "rejected"));
+        });
+
+        QUnit.test('External promise resolves once and gets renewed', function(assert){
+            assert.expect(1);
+            let queue = new ActionQueue();
+
+            const ACTION_TIME = 50;  // ms
+            const LENGTH = 10;       // actions to queue
+            const TOTAL_TIME = ACTION_TIME * LENGTH + 100;
+
+            function action(instance) {
+                console.debug("Called action", instance);
+                return TimedPromise(ACTION_TIME);
+            }
+            queue.promise().then((data) => assert.equal(data, 0));
+            for (var i = 0; i < LENGTH; i++) {
+                queue.append(_.partial(action, i), i);
+            }
+
+            let done = assert.async();
+            TimedPromise(TOTAL_TIME).then(done);
+        });
       });
     </script>
   </body>
