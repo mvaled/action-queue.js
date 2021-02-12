@@ -40,37 +40,39 @@
         }
 
         QUnit.test('FIFO queue scenario without cancelation', function(assert){
-          // Instances hold the actions number ran in the order they were
-          // ran.  When the queue is done, we can compare the expected order
-          // of actions.
-          var instances = [];
+            // Instances hold the actions number ran in the order they were
+            // ran.  When the queue is done, we can compare the expected order
+            // of actions.
+            var instances = [];
 
-          let queue = new ActionQueue();
+            let queue = new ActionQueue();
 
-          const ACTION_TIME = 50;  // ms
-          const LENGTH = 10;       // actions to queue
-          const TOTAL_TIME = LENGTH * ACTION_TIME;
+            const ACTION_TIME = 50;  // ms
+            const LENGTH = 10;       // actions to queue
+            const TOTAL_TIME = LENGTH * ACTION_TIME;
 
-          function action(instance) {
-            instances.push(instance);
-            console.debug("Called action", instance);
-            return TimedPromise(ACTION_TIME);
-          }
-
-          assert.expect(1);
-          assert.timeout(TOTAL_TIME + 500);
-          const done = assert.async();
-          queue.then(function(){
-            if (queue._queue.length === 0 && queue._running === null) {
-              assert.deepEqual(instances, [...Array(LENGTH).keys()]);
-              done();
+            function action(instance) {
+                instances.push(instance);
+                console.debug("Called action", instance);
+                return TimedPromise(ACTION_TIME);
             }
-          });
 
-          for (var i = 0; i < LENGTH; i++) {
-            console.debug("Queing action", i);
-            queue.append(_.partial(action, i), "Action number" + i);
-          }
+            assert.expect(LENGTH + 1);
+            assert.timeout(TOTAL_TIME + 500);
+            queue.then(function(data){
+                console.debug("Executed then with arguments", arguments);
+                assert.ok(0 <= data && data <= LENGTH);
+            });
+
+            for (var i = 0; i < LENGTH; i++) {
+                queue.append(_.partial(action, i), i);
+            }
+
+            let done = assert.async();
+            TimedPromise(TOTAL_TIME + 100).then(function(){
+                assert.deepEqual(instances, [...Array(LENGTH).keys()]);
+                done();
+            });
         });
 
         QUnit.test('LIFO queue scenario without cancelation', function(assert){

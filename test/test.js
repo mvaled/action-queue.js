@@ -46,20 +46,22 @@ QUnit.test('FIFO queue scenario without cancelation', function(assert){
         return TimedPromise(ACTION_TIME);
     }
 
-    assert.expect(1);
+    assert.expect(LENGTH + 1);
     assert.timeout(TOTAL_TIME + 500);
-    const done = assert.async();
-    queue.then(function(){
-        if (queue._queue.length === 0 && queue._running === null) {
-            assert.deepEqual(instances, [...Array(LENGTH).keys()]);
-            done();
-        }
+    queue.then(function(data){
+        console.debug("Executed then with arguments", arguments);
+        assert.ok(0 <= data && data <= LENGTH);
     });
 
     for (var i = 0; i < LENGTH; i++) {
-        console.debug("Queing action", i);
-        queue.append(_.partial(action, i), "Action number" + i);
+        queue.append(_.partial(action, i), i);
     }
+
+    let done = assert.async();
+    TimedPromise(TOTAL_TIME + 100).then(function(){
+        assert.deepEqual(instances, [...Array(LENGTH).keys()]);
+        done();
+    });
 });
 
 QUnit.test('LIFO queue scenario without cancelation', function(assert){
