@@ -133,7 +133,7 @@
                 this._running = {promise: promise, extra: extra};
                 let self = this;
                 promise.then(function(...result){
-                    let extra =  self._running.extra;
+                    let extra = (self._running!==null)?self._running.extra:[];
                     self._running = null;
                     self._thens.forEach(function(fn){
                         try{
@@ -151,7 +151,7 @@
                     });
                     self._run();
                 }).catch(function(...result){
-                    let extra =  self._running.extra;
+                    let extra = (self._running!==null)?self._running.extra:[];
                     self._running = null;
                     self._catchs.forEach(function(fn){
                         try{
