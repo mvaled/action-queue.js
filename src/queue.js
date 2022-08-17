@@ -149,6 +149,21 @@
         }
 
         /**
+         * Return the length of the queue
+         */
+        length() {
+            return this._queue.length + (this._running === null ? 0 : 1);
+        }
+
+        /**
+         * Return True if the queue is busy, either running or with waiting
+         * actions.
+         */
+        busy() {
+            return this.length() > 0;
+        }
+
+        /**
          * Run the next action in the queue.
          *
          * If there's an action running already or if the queue is empty, ignore
