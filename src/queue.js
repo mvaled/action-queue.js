@@ -1,6 +1,6 @@
 // -*- mode: js2; -*-
 
-(function(){
+(function () {
     /**
      * A collector and runner of coordinated actions.
      *
@@ -79,7 +79,7 @@
          * @param  {...any} extra Extra arguments to pass to callbacks
          */
         prepend(fn, ...extra) {
-            this._queue = [{fn: fn, extra: extra}].concat(this._queue);
+            this._queue = [{ fn: fn, extra: extra }].concat(this._queue);
             this._run();
         }
 
@@ -90,7 +90,7 @@
          * @param  {...any} extra Extra arguments to pass to callbacks
          */
         append(fn, ...extra) {
-            this._queue.push({fn: fn, extra: extra});
+            this._queue.push({ fn: fn, extra: extra });
             this._run();
         }
 
@@ -129,7 +129,7 @@
             let self = this;
             this._current_promise_resolve = null;
             this._current_promise_reject = null;
-            this._current_promise = new Promise(function (resolve, reject){
+            this._current_promise = new Promise(function (resolve, reject) {
                 self._current_promise_resolve = resolve;
                 self._current_promise_reject = reject;
             });
@@ -140,7 +140,7 @@
          */
         clear() {
             let pending = this._queue.concat();
-            while (this._queue.length > 0){ this._queue.shift(); }
+            while (this._queue.length > 0) { this._queue.shift(); }
             this._cancel_running();
             while (pending.length > 0) {
                 let action = pending.shift();
@@ -158,29 +158,29 @@
          */
         _run() {
             if (this._running === null && this._queue.length > 0) {
-                let {fn, extra} = this._queue.shift();
+                let { fn, extra } = this._queue.shift();
                 console.debug("Running the next action in the queue", fn, extra);
                 let promise = fn();
-                this._running = {promise: promise, extra: extra};
+                this._running = { promise: promise, extra: extra };
                 let self = this;
-                promise.then(function(...result){
+                promise.then(function (...result) {
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
-                    let extra = (self._running!==null)?self._running.extra:[];
+                    let extra = (self._running !== null) ? self._running.extra : [];
                     if (self._current_promise_resolve !== null) {
                         self._current_promise_resolve.apply(self, result.concat(extra));
                     }
                     self._setup_promise();
                     self._running = null;
-                    self._thens.forEach(function(fn){
-                        try{
+                    self._thens.forEach(function (fn) {
+                        try {
                             fn.apply(self, result.concat(extra));
                         } catch (e) {
                             console.error(e);
                         }
                     });
-                    self._finallys.forEach(function(fn){
+                    self._finallys.forEach(function (fn) {
                         try {
                             fn.apply(self, result.concat(extra));
                         } catch (e) {
@@ -188,24 +188,24 @@
                         }
                     });
                     self._run();
-                }).catch(function(...result){
+                }).catch(function (...result) {
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
-                    let extra = (self._running!==null)?self._running.extra:[];
+                    let extra = (self._running !== null) ? self._running.extra : [];
                     if (self._current_promise_reject !== null) {
                         self._current_promise_reject.apply(self, result.concat(extra));
                     }
                     self._setup_promise();
                     self._running = null;
-                    self._catchs.forEach(function(fn){
-                        try{
+                    self._catchs.forEach(function (fn) {
+                        try {
                             fn.apply(self, result.concat(extra));
                         } catch (e) {
                             console.error(e);
                         }
                     });
-                    self._finallys.forEach(function(fn){
+                    self._finallys.forEach(function (fn) {
                         try {
                             fn.apply(self, result.concat(extra));
                         } catch (e) {
@@ -240,10 +240,10 @@
                     else if (typeof promise.abort === "function") {
                         promise.abort();
                     }
-                } catch(e) {
+                } catch (e) {
                     console.error(e);
                     console.debug("It seems the promise failed to cancel.  I"
-                                  + " ignore the failure.");
+                        + " ignore the failure.");
                 }
                 this._cancel_action(this._running);
                 this._running = null;
@@ -257,14 +257,14 @@
             console.debug("Cancelling pending/running action", action);
             let extra = action.extra;
             let self = this;
-            this._cancels.forEach(function(fn){
-                try{
+            this._cancels.forEach(function (fn) {
+                try {
                     fn.apply(self, extra);
                 } catch (e) {
                     console.error(e);
                 }
             });
-            this._finallys.forEach(function(fn){
+            this._finallys.forEach(function (fn) {
                 try {
                     fn.apply(self, extra);
                 } catch (e) {

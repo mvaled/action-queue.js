@@ -1,23 +1,23 @@
-const {_} = require('underscore');
-const {ActionQueue} = require('../src/queue.js');
-const {CancelablePromise} = require('./CancelablePromise.js');
+const { _ } = require('underscore');
+const { ActionQueue } = require('../src/queue.js');
+const { CancelablePromise } = require('./CancelablePromise.js');
 
 function TimedPromise(time, reject_time) {
-    return new CancelablePromise(function(resolve, reject, onCancel){
+    return new CancelablePromise(function (resolve, reject, onCancel) {
         var reject_handler;
-        let resolve_handler = setTimeout(function(){
+        let resolve_handler = setTimeout(function () {
             if (typeof reject_time !== "undefined")
                 clearTimeout(reject_handler);
             resolve();
         }, time);
 
         if (typeof reject_time !== "undefined") {
-            reject_handler = setTimeout(function(){
+            reject_handler = setTimeout(function () {
                 reject();
                 clearTimeout(resolve_handler);
             }, reject_time);
         }
-        onCancel(function(){
+        onCancel(function () {
             clearTimeout(resolve_handler);
             if (typeof reject_time !== "undefined") {
                 clearTimeout(reject_handler);
@@ -28,7 +28,7 @@ function TimedPromise(time, reject_time) {
 
 QUnit.module('ActionQueue');
 
-QUnit.test('FIFO queue scenario without cancelation', function(assert){
+QUnit.test('FIFO queue scenario without cancelation', function (assert) {
     // Instances hold the actions number ran in the order they were
     // ran.  When the queue is done, we can compare the expected order
     // of actions.
@@ -48,7 +48,7 @@ QUnit.test('FIFO queue scenario without cancelation', function(assert){
 
     assert.expect(LENGTH + 1);
     assert.timeout(TOTAL_TIME + 500);
-    queue.then(function(data){
+    queue.then(function (data) {
         console.debug("Executed then with arguments", arguments);
         assert.ok(0 <= data && data <= LENGTH);
     });
@@ -58,13 +58,13 @@ QUnit.test('FIFO queue scenario without cancelation', function(assert){
     }
 
     let done = assert.async();
-    TimedPromise(TOTAL_TIME + 100).then(function(){
+    TimedPromise(TOTAL_TIME + 100).then(function () {
         assert.deepEqual(instances, [...Array(LENGTH).keys()]);
         done();
     });
 });
 
-QUnit.test('LIFO queue scenario without cancelation', function(assert){
+QUnit.test('LIFO queue scenario without cancelation', function (assert) {
     // Instances hold the actions number ran in the order they were
     // ran.  When the queue is done, we can compare the expected order
     // of actions.
@@ -85,7 +85,7 @@ QUnit.test('LIFO queue scenario without cancelation', function(assert){
     assert.expect(2);
     assert.timeout(TOTAL_TIME + 500);
     const done = assert.async();
-    queue.then(function(){
+    queue.then(function () {
         if (queue._queue.length === 0 && queue._running === null) {
             // The first job will be run inmediately, but the next ones will
             // be actually LIFO.
@@ -104,7 +104,7 @@ QUnit.test('LIFO queue scenario without cancelation', function(assert){
     }
 });
 
-QUnit.test('FIFO queue scenario with cancelation', function(assert){
+QUnit.test('FIFO queue scenario with cancelation', function (assert) {
     // Instances hold the actions number ran in the order they were
     // ran.  When the queue is done, we can compare the expected order
     // of actions.
@@ -127,13 +127,13 @@ QUnit.test('FIFO queue scenario with cancelation', function(assert){
     assert.expect(3);
     assert.timeout(TOTAL_TIME + 500);
     const done = assert.async();
-    queue.then(function(){
+    queue.then(function () {
         if (queue._queue.length === 0 && queue._running === null) {
             // In this scenario the first action is run inmediately
             assert.equal(instances.shift(), 0);
             // but then the remaining actions are queue but the last action
             // replaces them
-            assert.equal(instances.shift(), LENGTH -1);
+            assert.equal(instances.shift(), LENGTH - 1);
             assert.deepEqual(instances, []);
             done();
         }
@@ -150,7 +150,7 @@ QUnit.test('FIFO queue scenario with cancelation', function(assert){
     }
 });
 
-QUnit.test('External promise resolves', function(assert){
+QUnit.test('External promise resolves', function (assert) {
     let queue = new ActionQueue();
     const ACTION_TIME = 50;
 
@@ -167,7 +167,7 @@ QUnit.test('External promise resolves', function(assert){
     queue.append(_.partial(action, "resolved"));
 });
 
-QUnit.test('External promise rejects', function(assert){
+QUnit.test('External promise rejects', function (assert) {
     let queue = new ActionQueue();
     const ACTION_TIME = 50;
 
@@ -185,7 +185,7 @@ QUnit.test('External promise rejects', function(assert){
     queue.append(_.partial(action, "rejected"));
 });
 
-QUnit.test('External promise resolves once and gets renewed', function(assert){
+QUnit.test('External promise resolves once and gets renewed', function (assert) {
     let queue = new ActionQueue();
 
     let instances = [];
@@ -208,7 +208,7 @@ QUnit.test('External promise resolves once and gets renewed', function(assert){
     for (var i = 0; i < LENGTH; i++) {
         queue.append(_.partial(action, i), i);
     }
-    TimedPromise(FIRST_WAVE).then(function(){
+    TimedPromise(FIRST_WAVE).then(function () {
         queue.promise().then((data) => assert.equal(data, LENGTH));
         for (var i = 0; i < LENGTH; i++) {
             queue.append(_.partial(action, i + LENGTH), i + LENGTH);
@@ -217,7 +217,7 @@ QUnit.test('External promise resolves once and gets renewed', function(assert){
 
     assert.timeout(TOTAL_TIME + 100);
     let done = assert.async();
-    TimedPromise(TOTAL_TIME).then(function(){
+    TimedPromise(TOTAL_TIME).then(function () {
         assert.deepEqual(instances, [...Array(2 * LENGTH).keys()]);
         done();
     });
