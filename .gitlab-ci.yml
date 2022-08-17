@@ -11,5 +11,5 @@ run all tests:
     paths:
       - node_modules
   only:
-    - master
+    - main
     - merge_requests
