@@ -174,7 +174,6 @@
         _run() {
             if (this._running === null && this._queue.length > 0) {
                 let { fn, extra } = this._queue.shift();
-                console.debug("Running the next action in the queue", fn, extra);
                 let promise = fn();
                 this._running = { promise: promise, extra: extra };
                 let self = this;
@@ -257,8 +256,6 @@
                     }
                 } catch (e) {
                     console.error(e);
-                    console.debug("It seems the promise failed to cancel.  I"
-                        + " ignore the failure.");
                 }
                 this._cancel_action(this._running);
                 this._running = null;
@@ -269,7 +266,6 @@
          * Call the cancelled and finally callbacks for the action.
          */
         _cancel_action(action) {
-            console.debug("Cancelling pending/running action", action);
             let extra = action.extra;
             let self = this;
             this._cancels.forEach(function (fn) {

@@ -4,9 +4,10 @@ stages:
 run all tests:
   image: node:buster-slim
   before_script:
-    - npm install --also=dev
+    - npm install -g pnpm
+    - pnpm install
   script:
-    - npm test
+    - pnpm run test
   cache:
     paths:
       - node_modules
