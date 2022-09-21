@@ -2,26 +2,11 @@ const { _ } = require('underscore');
 const { ActionQueue } = require('../src/queue.js');
 const { CancelablePromise } = require('./CancelablePromise.js');
 
-function TimedPromise(time, reject_time) {
-    return new CancelablePromise(function (resolve, reject, onCancel) {
-        var reject_handler;
-        let resolve_handler = setTimeout(function () {
-            if (typeof reject_time !== "undefined")
-                clearTimeout(reject_handler);
-            resolve();
-        }, time);
-
-        if (typeof reject_time !== "undefined") {
-            reject_handler = setTimeout(function () {
-                reject();
-                clearTimeout(resolve_handler);
-            }, reject_time);
-        }
+function TimedPromise(time) {
+    return new CancelablePromise(function (resolve, _reject, onCancel) {
+        let resolve_handler = setTimeout(resolve, time);
         onCancel(function () {
             clearTimeout(resolve_handler);
-            if (typeof reject_time !== "undefined") {
-                clearTimeout(reject_handler);
-            }
         });
     });
 }
