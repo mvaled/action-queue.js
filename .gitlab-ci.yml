@@ -11,6 +11,8 @@ run all tests:
   cache:
     paths:
       - node_modules
+  tags:
+    - docker
   only:
     - main
     - merge_requests
