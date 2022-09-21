@@ -2,32 +2,16 @@ const { _ } = require('underscore');
 const { ActionQueue } = require('../src/queue.js');
 const { CancelablePromise } = require('./CancelablePromise.js');
 
-function TimedPromise(time, reject_time) {
-    return new CancelablePromise(function (resolve, reject, onCancel) {
-        var reject_handler;
-        let resolve_handler = setTimeout(function () {
-            if (typeof reject_time !== "undefined")
-                clearTimeout(reject_handler);
-            resolve();
-        }, time);
-
-        if (typeof reject_time !== "undefined") {
-            reject_handler = setTimeout(function () {
-                reject();
-                clearTimeout(resolve_handler);
-            }, reject_time);
-        }
+function TimedPromise(time) {
+    return new CancelablePromise(function (resolve, _reject, onCancel) {
+        let resolve_handler = setTimeout(resolve, time);
         onCancel(function () {
             clearTimeout(resolve_handler);
-            if (typeof reject_time !== "undefined") {
-                clearTimeout(reject_handler);
-            }
         });
     });
 }
 
 QUnit.module('ActionQueue');
-
 QUnit.test('FIFO queue scenario without cancelation', function (assert) {
     // Instances hold the actions number ran in the order they were
     // ran.  When the queue is done, we can compare the expected order
@@ -104,88 +88,139 @@ QUnit.test('LIFO queue scenario without cancelation', function (assert) {
     }
 });
 
-QUnit.test('FIFO queue scenario with cancelation', function (assert) {
-    // Instances hold the actions number ran in the order they were
-    // ran.  When the queue is done, we can compare the expected order
-    // of actions.
-    let instances = [];
+let buildFIFOScenario = function (createPromises) {
+    return function (assert) {
+        // Instances hold the actions number ran in the order they were
+        // ran.  When the queue is done, we can compare the expected order
+        // of actions.
+        let instances = [];
 
-    let queue = new ActionQueue();
+        let queue = new ActionQueue({ createPromises: createPromises });
 
-    const ACTION_TIME = 50;  // ms
-    const LENGTH = 10;       // actions to queue
-    // Since only two actions are going to be run.
-    const TOTAL_TIME = 2 * ACTION_TIME;
+        const ACTION_TIME = 50;  // ms
+        const LENGTH = 10;       // actions to queue
+        // Since only two actions are going to be run.
+        const TOTAL_TIME = 2 * ACTION_TIME;
+
+        function action(instance) {
+            instances.push(instance);
+            console.debug("Called action", instance);
+            let result = TimedPromise(ACTION_TIME);
+            return result;
+        }
+
+        assert.expect(3);
+        assert.timeout(TOTAL_TIME + 500);
+        const done = assert.async();
+        queue.then(function () {
+            if (queue._queue.length === 0 && queue._running === null) {
+                // In this scenario the first action is run inmediately
+                assert.equal(instances.shift(), 0);
+                // but then the remaining actions are queue but the last action
+                // replaces them
+                assert.equal(instances.shift(), LENGTH - 1);
+                assert.deepEqual(instances, []);
+                done();
+            }
+        });
+
+        for (var i = 0; i < LENGTH; i++) {
+            if (i < LENGTH - 1) {
+                console.debug("Queing action", i);
+                let result = queue.append(_.partial(action, i), "Action" + " number" + i);
+                if (createPromises)
+                    result.catch(() => {});
+            } else {
+                console.debug("Replacing queue with action", i);
+                queue.replace(_.partial(action, i), "Action number" + i);
+            }
+        }
+    };
+};
+
+QUnit.test('FIFO queue scenario with cancelation, with promises', buildFIFOScenario(true));
+QUnit.test('FIFO queue scenario with cancelation, with no promises', buildFIFOScenario(false));
+
+QUnit.test('External promises resolve', function (assert) {
+    const ACTION_TIME = 100;
+    let done = assert.async();
+    assert.timeout(ACTION_TIME * 3);
+    assert.expect(0);
 
     function action(instance) {
-        instances.push(instance);
         console.debug("Called action", instance);
         let result = TimedPromise(ACTION_TIME);
+        result.finally(() => console.log("Action ", instance, "is now done"));
         return result;
     }
 
-    assert.expect(3);
-    assert.timeout(TOTAL_TIME + 500);
-    const done = assert.async();
-    queue.then(function () {
-        if (queue._queue.length === 0 && queue._running === null) {
-            // In this scenario the first action is run inmediately
-            assert.equal(instances.shift(), 0);
-            // but then the remaining actions are queue but the last action
-            // replaces them
-            assert.equal(instances.shift(), LENGTH - 1);
-            assert.deepEqual(instances, []);
-            done();
-        }
-    });
-
-    for (var i = 0; i < LENGTH; i++) {
-        if (i < LENGTH - 1) {
-            console.debug("Queing action", i);
-            queue.append(_.partial(action, i), "Action number" + i);
-        } else {
-            console.debug("Replacing queue with action", i);
-            queue.replace(_.partial(action, i), "Action number" + i);
-        }
-    }
+    let queue = new ActionQueue();
+    queue
+        .append(_.partial(action, "rejected"))
+        .then(done, () => assert.ok(false));
 });
 
-QUnit.test('External promise resolves', function (assert) {
-    let queue = new ActionQueue();
-    const ACTION_TIME = 50;
+
+
+QUnit.test('External promises reject', function (assert) {
+    const ACTION_TIME = 100;
+    let done = assert.async();
+    assert.timeout(ACTION_TIME * 3);
+    assert.expect(0);
 
     function action(instance) {
         console.debug("Called action", instance);
-        return TimedPromise(ACTION_TIME);
+        return new Promise(
+            (_, reject) => TimedPromise(ACTION_TIME).then(reject)
+        ).finally(() => console.log("Action ", instance, "is now done"));
     }
-    assert.expect(0);
+
+    let queue = new ActionQueue();
+    queue
+        .append(_.partial(action, "rejected"))
+        .then(() => assert.ok(false), done);
+});
+
+
+QUnit.test('External rolling-promise resolves', function (assert) {
+    const ACTION_TIME = 100;
     let done = assert.async();
-    queue.promise().then(
-        done,
-        () => assert.ok(false)
-    );
+    assert.timeout(ACTION_TIME * 3);
+    assert.expect(0);
+
+    function action(instance) {
+        console.debug("Called action", instance);
+        let result = TimedPromise(ACTION_TIME);
+        result.finally(() => console.log("Action ", instance, "is now done"));
+        return result;
+    }
+
+    let queue = new ActionQueue();
+    queue.promise().then(done, () => assert.ok(false));
     queue.append(_.partial(action, "resolved"));
 });
 
-QUnit.test('External promise rejects', function (assert) {
-    let queue = new ActionQueue();
-    const ACTION_TIME = 50;
+
+
+QUnit.test('External rolling-promise reject', function (assert) {
+    const ACTION_TIME = 100;
+    let done = assert.async();
+    assert.timeout(ACTION_TIME * 3);
+    assert.expect(0);
 
     function action(instance) {
         console.debug("Called action", instance);
-        return new Promise((_, reject) => TimedPromise(ACTION_TIME).then(() => reject()));
+        return new Promise(
+            (_, reject) => TimedPromise(ACTION_TIME).then(reject)
+        ).finally(() => console.log("Action ", instance, "is now done"));
     }
 
-    assert.expect(0);
-    let done = assert.async();
-    queue.promise().then(
-        () => assert.ok(false),
-        done
-    );
-    queue.append(_.partial(action, "rejected"));
+    let queue = new ActionQueue();
+    queue.promise().then(() => assert.ok(false), done);
+    queue.append(_.partial(action, "rejected")).catch(() => {});
 });
 
-QUnit.test('External promise resolves once and gets renewed', function (assert) {
+QUnit.test('External rolling-promise resolves once and gets renewed', function (assert) {
     let queue = new ActionQueue();
 
     let instances = [];
@@ -223,8 +258,14 @@ QUnit.test('External promise resolves once and gets renewed', function (assert) 
     });
 });
 
-
-
-// Local Variables:
-// js-indent-level: 4
-// End:
+QUnit.test('No promises, ma!', function (assert) {
+    const ACTION_TIME = 50;
+    function action() {
+        return TimedPromise(ACTION_TIME);
+    }
+    assert.expect(3);
+    let queue = new ActionQueue({ createPromises: false });
+    assert.ok(typeof queue.append(action) === "undefined");
+    assert.ok(typeof queue.prepend(action) === "undefined");
+    assert.ok(typeof queue.replace(action) === "undefined");
+});

@@ -1,13 +1,13 @@
 {
   "name": "action-queue",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A coordinated non-concurrent queue of actions",
   "main": "src/queue.js",
   "directories": {
     "test": "tests"
   },
   "devDependencies": {
-    "qunit": "^2.14.0",
+    "qunit": "^2.19.0",
     "underscore": "^1.12.0"
   },
   "scripts": {
