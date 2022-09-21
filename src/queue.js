@@ -10,9 +10,21 @@
      * The API allows actions to be appended to be run in FIFO, LIFO (without
      * replacement) and cancelation (if the underlying supports it) patterns.
      *
+     * You can pass an object with options:
+     *
+     * - `createPromises`, it should be a bool to indicate if the functions
+     *    'append', 'prepend' and 'replace' should create and promises.
+     *    Defaults to true.
+     *
      */
     class ActionQueue {
-        constructor() {
+        constructor(options) {
+            if (typeof options !== "undefined") {
+                this._options = { createPromises: !!options.createPromises };
+            } else {
+                this._options = { createPromises: true };
+            }
+
             // The subscribed callbacks
             this._thens = [];
             this._catchs = [];
@@ -77,20 +89,28 @@
          * @param {boolean} force
          * @param  {...any} extra Extra arguments to pass to callbacks
          *
-         * Returns a promise that is equivalent to the one that would be
-         * returned by the action after it starts running.  This promise will
-         * resolve only if/when the action runs and resolves, and it will
-         * reject when the action rejects or is cancelled.
+         * If the option `createPromises` is true, return a promise that is
+         * equivalent to the one that would be returned by the action after it
+         * starts running.  This promise will resolve only if/when the action
+         * runs and resolves, and it will reject when the action rejects or is
+         * cancelled.
+         *
+         * If `createPromises` is false, return undefined.
          */
         prepend(fn, ...extra) {
-            let connectors = { resolve: null, reject: null };
-            let promise = new Promise(function (resolve, reject) {
-                connectors.resolve = resolve;
-                connectors.reject = reject;
-            });
+            let connectors = { resolve: () => {}, reject: () => {} };
+            let result;
+            if (this._options.createPromises) {
+                result = new Promise(function (resolve, reject) {
+                    connectors.resolve = resolve;
+                    connectors.reject = reject;
+                });
+            } else {
+                result = undefined;
+            }
             this._queue = [{ fn: fn, connectors: connectors, extra: extra }].concat(this._queue);
             this._run();
-            return promise;
+            return result;
         }
 
         /**
@@ -99,20 +119,28 @@
          * @param {function} fn The action to perform
          * @param  {...any} extra Extra arguments to pass to callbacks
          *
-         * Returns a promise that is equivalent to the one that would be
-         * returned by the action after it starts running.  This promise will
-         * resolve only if/when the action runs and resolves, and it will
-         * reject when the action rejects or is cancelled.
+         * If the option `createPromises` is true, return a promise that is
+         * equivalent to the one that would be returned by the action after it
+         * starts running.  This promise will resolve only if/when the action
+         * runs and resolves, and it will reject when the action rejects or is
+         * cancelled.
+         *
+         * If `createPromises` is false, return undefined.
          */
         append(fn, ...extra) {
-            let connectors = { resolve: null, reject: null };
-            let promise = new Promise(function (resolve, reject) {
-                connectors.resolve = resolve;
-                connectors.reject = reject;
-            });
+            let connectors = { resolve: () => {}, reject: () => {} };
+            let result;
+            if (this._options.createPromises) {
+                result = new Promise(function (resolve, reject) {
+                    connectors.resolve = resolve;
+                    connectors.reject = reject;
+                });
+            } else {
+                result = undefined;
+            }
             this._queue.push({ fn: fn, connectors: connectors, extra: extra });
             this._run();
-            return promise;
+            return result;
         }
 
         /**

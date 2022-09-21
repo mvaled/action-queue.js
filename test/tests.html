@@ -99,51 +99,58 @@
         }
       });
 
-      QUnit.test('FIFO queue scenario with cancelation', function (assert) {
-        // Instances hold the actions number ran in the order they were
-        // ran.  When the queue is done, we can compare the expected order
-        // of actions.
-        let instances = [];
+      let buildFIFOScenario = function (createPromises) {
+        return function (assert) {
+          // Instances hold the actions number ran in the order they were
+          // ran.  When the queue is done, we can compare the expected order
+          // of actions.
+          let instances = [];
 
-        let queue = new ActionQueue();
+          let queue = new ActionQueue({ createPromises: createPromises });
 
-        const ACTION_TIME = 50;  // ms
-        const LENGTH = 10;       // actions to queue
-        // Since only two actions are going to be run.
-        const TOTAL_TIME = 2 * ACTION_TIME;
+          const ACTION_TIME = 50;  // ms
+          const LENGTH = 10;       // actions to queue
+          // Since only two actions are going to be run.
+          const TOTAL_TIME = 2 * ACTION_TIME;
 
-        function action(instance) {
-          instances.push(instance);
-          console.debug("Called action", instance);
-          let result = TimedPromise(ACTION_TIME);
-          return result;
-        }
-
-        assert.expect(3);
-        assert.timeout(TOTAL_TIME + 500);
-        const done = assert.async();
-        queue.then(function () {
-          if (queue._queue.length === 0 && queue._running === null) {
-            // In this scenario the first action is run inmediately
-            assert.equal(instances.shift(), 0);
-            // but then the remaining actions are queue but the last action
-            // replaces them
-            assert.equal(instances.shift(), LENGTH - 1);
-            assert.deepEqual(instances, []);
-            done();
+          function action(instance) {
+            instances.push(instance);
+            console.debug("Called action", instance);
+            let result = TimedPromise(ACTION_TIME);
+            return result;
           }
-        });
 
-        for (var i = 0; i < LENGTH; i++) {
-          if (i < LENGTH - 1) {
-            console.debug("Queing action", i);
-            queue.append(_.partial(action, i), "Action number" + i).catch(() => {});
-          } else {
-            console.debug("Replacing queue with action", i);
-            queue.replace(_.partial(action, i), "Action number" + i);
+          assert.expect(3);
+          assert.timeout(TOTAL_TIME + 500);
+          const done = assert.async();
+          queue.then(function () {
+            if (queue._queue.length === 0 && queue._running === null) {
+              // In this scenario the first action is run inmediately
+              assert.equal(instances.shift(), 0);
+              // but then the remaining actions are queue but the last action
+              // replaces them
+              assert.equal(instances.shift(), LENGTH - 1);
+              assert.deepEqual(instances, []);
+              done();
+            }
+          });
+
+          for (var i = 0; i < LENGTH; i++) {
+            if (i < LENGTH - 1) {
+              console.debug("Queing action", i);
+              let result = queue.append(_.partial(action, i), "Action" + " number" + i);
+              if (createPromises)
+                result.catch(() => {});
+            } else {
+              console.debug("Replacing queue with action", i);
+              queue.replace(_.partial(action, i), "Action number" + i);
+            }
           }
-        }
-      });
+        };
+      };
+
+      QUnit.test('FIFO queue scenario with cancelation, with promises', buildFIFOScenario(true));
+      QUnit.test('FIFO queue scenario with cancelation, with no promises', buildFIFOScenario(false));
 
       QUnit.test('External promises resolve', function (assert) {
         const ACTION_TIME = 100;
@@ -260,6 +267,18 @@
           assert.deepEqual(instances, [...Array(2 * LENGTH).keys()]);
           done();
         });
+      });
+
+      QUnit.test('No promises, ma!', function (assert) {
+        const ACTION_TIME = 50;
+        function action() {
+          return TimedPromise(ACTION_TIME);
+        }
+        assert.expect(3);
+        let queue = new ActionQueue({ createPromises: false });
+        assert.ok(typeof queue.append(action) === "undefined");
+        assert.ok(typeof queue.prepend(action) === "undefined");
+        assert.ok(typeof queue.replace(action) === "undefined");
       });
 
     });
