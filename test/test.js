@@ -12,7 +12,6 @@ function TimedPromise(time) {
 }
 
 QUnit.module('ActionQueue');
-
 QUnit.test('FIFO queue scenario without cancelation', function (assert) {
     // Instances hold the actions number ran in the order they were
     // ran.  When the queue is done, we can compare the expected order
@@ -127,7 +126,7 @@ QUnit.test('FIFO queue scenario with cancelation', function (assert) {
     for (var i = 0; i < LENGTH; i++) {
         if (i < LENGTH - 1) {
             console.debug("Queing action", i);
-            queue.append(_.partial(action, i), "Action number" + i);
+            queue.append(_.partial(action, i), "Action number" + i).catch(() => {});
         } else {
             console.debug("Replacing queue with action", i);
             queue.replace(_.partial(action, i), "Action number" + i);
@@ -135,81 +134,42 @@ QUnit.test('FIFO queue scenario with cancelation', function (assert) {
     }
 });
 
-QUnit.test('External promise resolves', function (assert) {
-    let queue = new ActionQueue();
+QUnit.test('External promises resolve', function (assert) {
     const ACTION_TIME = 50;
-
-    function action(instance) {
-        console.debug("Called action", instance);
-        return TimedPromise(ACTION_TIME);
-    }
+    let done = assert.async();
+    assert.timeout(5000);
     assert.expect(0);
-    let done = assert.async();
-    queue.promise().then(
-        done,
-        () => assert.ok(false)
-    );
-    queue.append(_.partial(action, "resolved"));
-});
-
-QUnit.test('External promise rejects', function (assert) {
-    let queue = new ActionQueue();
-    const ACTION_TIME = 50;
 
     function action(instance) {
         console.debug("Called action", instance);
-        return new Promise((_, reject) => TimedPromise(ACTION_TIME).then(() => reject()));
+        let result = TimedPromise(ACTION_TIME);
+        result.finally(() => console.log("Action ", instance, "is now done"));
+        return result;
     }
 
+    let queue = new ActionQueue();
+    queue
+        .append(_.partial(action, "rejected"))
+        .then(done, () => assert.ok(false));
+});
+
+
+
+QUnit.test('External promises reject', function (assert) {
+    let done = assert.async();
+    const ACTION_TIME = 1000;
+    assert.timeout(ACTION_TIME * 3);
     assert.expect(0);
-    let done = assert.async();
-    queue.promise().then(
-        () => assert.ok(false),
-        done
-    );
-    queue.append(_.partial(action, "rejected"));
-});
-
-QUnit.test('External promise resolves once and gets renewed', function (assert) {
-    let queue = new ActionQueue();
-
-    let instances = [];
-
-    const ACTION_TIME = 50;  // ms
-    const LENGTH = 10;       // actions to queue
-    const FIRST_WAVE = ACTION_TIME * LENGTH + 100;
-    const TOTAL_TIME = FIRST_WAVE * 2;
 
     function action(instance) {
-        instances.push(instance);
         console.debug("Called action", instance);
-        return TimedPromise(ACTION_TIME);
+        return new Promise(
+            (_, reject) => TimedPromise(ACTION_TIME).then(reject)
+        ).finally(() => console.log("Action ", instance, "is now done"));
     }
 
-    // Even though we push many actions and all are executed, the promise
-    // is executed just once (for the first action)
-    assert.expect(3);
-    queue.promise().then((data) => assert.equal(data, 0));
-    for (var i = 0; i < LENGTH; i++) {
-        queue.append(_.partial(action, i), i);
-    }
-    TimedPromise(FIRST_WAVE).then(function () {
-        queue.promise().then((data) => assert.equal(data, LENGTH));
-        for (var i = 0; i < LENGTH; i++) {
-            queue.append(_.partial(action, i + LENGTH), i + LENGTH);
-        }
-    });
-
-    assert.timeout(TOTAL_TIME + 100);
-    let done = assert.async();
-    TimedPromise(TOTAL_TIME).then(function () {
-        assert.deepEqual(instances, [...Array(2 * LENGTH).keys()]);
-        done();
-    });
+    let queue = new ActionQueue();
+    queue
+        .append(_.partial(action, "rejected"))
+        .then(() => assert.ok(false), done);
 });
-
-
-
-// Local Variables:
-// js-indent-level: 4
-// End:

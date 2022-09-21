@@ -22,8 +22,6 @@
             // The queue and current running promise (if any).
             this._queue = [];
             this._running = null;
-
-            this._setup_promise();
         }
 
         /**
@@ -77,10 +75,21 @@
          * @param {function} fn The action to perform
          * @param {boolean} force
          * @param  {...any} extra Extra arguments to pass to callbacks
+         *
+         * Returns a promise that is equivalent to the one that would be
+         * returned by the action after it starts running.  This promise will
+         * resolve only if/when the action runs and resolves, and it will
+         * reject when the action rejects or is cancelled.
          */
         prepend(fn, ...extra) {
-            this._queue = [{ fn: fn, extra: extra }].concat(this._queue);
+            let connectors = { resolve: null, reject: null };
+            let promise = new Promise(function (resolve, reject) {
+                connectors.resolve = resolve;
+                connectors.reject = reject;
+            });
+            this._queue = [{ fn: fn, connectors: connectors, extra: extra }].concat(this._queue);
             this._run();
+            return promise;
         }
 
         /**
@@ -88,10 +97,21 @@
          *
          * @param {function} fn The action to perform
          * @param  {...any} extra Extra arguments to pass to callbacks
+         *
+         * Returns a promise that is equivalent to the one that would be
+         * returned by the action after it starts running.  This promise will
+         * resolve only if/when the action runs and resolves, and it will
+         * reject when the action rejects or is cancelled.
          */
         append(fn, ...extra) {
-            this._queue.push({ fn: fn, extra: extra });
+            let connectors = { resolve: null, reject: null };
+            let promise = new Promise(function (resolve, reject) {
+                connectors.resolve = resolve;
+                connectors.reject = reject;
+            });
+            this._queue.push({ fn: fn, connectors: connectors, extra: extra });
             this._run();
+            return promise;
         }
 
         /**
@@ -100,39 +120,15 @@
          *
          * @param {function} fn The action to perform
          * @param  {...any} extra Extra arguments to pass to callbacks
+         *
+         * Returns a promise that is equivalent to the one that would be
+         * returned by the action after it starts running.  This promise will
+         * resolve only if/when the action runs and resolves, and it will
+         * reject when the action rejects or is cancelled.
          */
         replace(fn, ...extra) {
             this.clear();
-            this.append(fn, ...extra);
-        }
-
-        /**
-         * Return a promise that resolves/rejects just as soon as the first
-         * pending action resolves/rejects.
-         *
-         * Cancelations don't affect the promise.  If the running action gets
-         * cancelled midway, this promise will take over on the next action.
-         * If no action is scheduled to be next, we wait.
-         *
-         * The only way this promise is rejected, is if the running action is
-         * rejected.  The only way this promise is resolved, is when the
-         * running action is resolved.
-         *
-         * When the same queue is used several times, calls to promise may
-         * return different promises.
-         */
-        promise() {
-            return this._current_promise;
-        }
-
-        _setup_promise() {
-            let self = this;
-            this._current_promise_resolve = null;
-            this._current_promise_reject = null;
-            this._current_promise = new Promise(function (resolve, reject) {
-                self._current_promise_resolve = resolve;
-                self._current_promise_reject = reject;
-            });
+            return this.append(fn, ...extra);
         }
 
         /**
@@ -173,19 +169,20 @@
          */
         _run() {
             if (this._running === null && this._queue.length > 0) {
-                let { fn, extra } = this._queue.shift();
+                let { fn, connectors, extra } = this._queue.shift();
                 let promise = fn();
-                this._running = { promise: promise, extra: extra };
+                this._running = { promise: promise, connectors: connectors, extra: extra };
                 let self = this;
                 promise.then(function (...result) {
+                    try {
+                        connectors.resolve(...result);
+                    } catch (e) {
+                        console.error(e);
+                    }
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
                     let extra = (self._running !== null) ? self._running.extra : [];
-                    if (self._current_promise_resolve !== null) {
-                        self._current_promise_resolve.apply(self, result.concat(extra));
-                    }
-                    self._setup_promise();
                     self._running = null;
                     self._thens.forEach(function (fn) {
                         try {
@@ -203,14 +200,15 @@
                     });
                     self._run();
                 }).catch(function (...result) {
+                    try {
+                        connectors.reject(...result);
+                    } catch (e) {
+                        console.error(e);
+                    }
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
                     let extra = (self._running !== null) ? self._running.extra : [];
-                    if (self._current_promise_reject !== null) {
-                        self._current_promise_reject.apply(self, result.concat(extra));
-                    }
-                    self._setup_promise();
                     self._running = null;
                     self._catchs.forEach(function (fn) {
                         try {
@@ -245,7 +243,6 @@
                 // rejecting the queue's promise in such cases, because our
                 // API states that we won't reject the promise when cancelling
                 // an action.
-                this._current_promise_reject = null;
                 let promise = this._running.promise;
                 try {
                     if (typeof promise.cancel === "function") {
@@ -266,6 +263,7 @@
          * Call the cancelled and finally callbacks for the action.
          */
         _cancel_action(action) {
+            action.connectors.reject(new Error("Action was cancelled"));
             let extra = action.extra;
             let self = this;
             this._cancels.forEach(function (fn) {
