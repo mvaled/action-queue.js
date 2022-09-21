@@ -353,7 +353,12 @@
          * Call the cancelled and finally callbacks for the action.
          */
         _cancel_action(action) {
-            action.connectors.reject(new Error("Action was cancelled"));
+            try {
+                action.connectors.reject(new Error("Action was cancelled"));
+            }
+            catch (e) {
+                console.error(e);
+            }
             let extra = action.extra;
             let self = this;
             this._cancels.forEach(function (fn) {
