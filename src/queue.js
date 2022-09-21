@@ -22,6 +22,7 @@
             // The queue and current running promise (if any).
             this._queue = [];
             this._running = null;
+            this._rolling = null;
         }
 
         /**
@@ -159,6 +160,41 @@
             return this.length() > 0;
         }
 
+
+        /**
+         * Return a promise that resolves/rejects just as soon as the first
+         * pending action resolves/rejects.
+         *
+         * Cancelations don't affect the promise.  If the running action gets
+         * cancelled midway, this promise will take over on the next action.
+         * If no action is scheduled to be next, we wait.
+         *
+         * The only way this promise is rejected, is if the running action is
+         * rejected.  The only way this promise is resolved, is when the
+         * running action is resolved.
+         *
+         * When the same queue is used several times, calls to promise may
+         * return different promises.
+         */
+        promise() {
+            if (this._rolling === null)
+                this._setup_rolling_promise();
+            return this._rolling.promise;
+        }
+
+        _setup_rolling_promise() {
+            let self = this;
+            self._rolling = {
+                promise: null,
+                resolve: null,
+                reject: null,
+            };
+            self._rolling.promise = new Promise(function (resolve, reject) {
+                self._rolling.resolve = resolve;
+                self._rolling.reject = reject;
+            });
+        }
+
         /**
          * Run the next action in the queue.
          *
@@ -183,6 +219,19 @@
                         result = [];
                     }
                     let extra = (self._running !== null) ? self._running.extra : [];
+
+                    if (self._rolling !== null) {
+                        let rolling_resolve = self._rolling.resolve;
+                        if (typeof rolling_resolve != "undefined" && rolling_resolve !== null) {
+                            try {
+                                rolling_resolve.apply(self, result.concat(extra));
+                            } catch (e) {
+                                console.error(e);
+                            }
+                        }
+                        self._rolling = null;
+                    }
+
                     self._running = null;
                     self._thens.forEach(function (fn) {
                         try {
@@ -209,6 +258,19 @@
                         result = [];
                     }
                     let extra = (self._running !== null) ? self._running.extra : [];
+
+                    if (self._rolling !== null) {
+                        let rolling_reject = self._rolling.reject;
+                        if (typeof rolling_reject != "undefined" && rolling_reject !== null) {
+                            try {
+                                rolling_reject.apply(self, result.concat(extra));
+                            } catch (e) {
+                                console.error(e);
+                            }
+                        }
+                        self._rolling = null;
+                    }
+
                     self._running = null;
                     self._catchs.forEach(function (fn) {
                         try {
