@@ -16,13 +16,23 @@
      *    'append', 'prepend' and 'replace' should create and promises.
      *    Defaults to true.
      *
+     * - `workers`, if present it should a small integer to indicate the
+     *   amount of actions the queue can run concurrently.  We advice that you
+     *   really small number: max. 10.  The default is 1, which means no
+     *   concurrency.
+     *
      */
     class ActionQueue {
         constructor(options) {
             if (typeof options !== "undefined") {
-                this._options = { createPromises: !!options.createPromises };
+                this._options = {
+                    createPromises: !!options.createPromises,
+                    workers: typeof options.workers == "number" &&
+                        options.workers > 1
+                        ? options.workers : 1,
+                };
             } else {
-                this._options = { createPromises: true };
+                this._options = { createPromises: true, workers: 1 };
             }
 
             // The subscribed callbacks
@@ -31,10 +41,15 @@
             this._finallys = [];
             this._cancels = [];
 
-            // The queue and current running promise (if any).
+            // The queue state: paused, the pending jobs, the running actions,
+            // and the *rolling* promise if any.
+            this._paused = false;
             this._queue = [];
-            this._running = null;
             this._rolling = null;
+
+            this._workers = {};
+            this._idle = new Set();
+            [...Array(this._options.workers).keys()].map(x => this._idle.add(x));
         }
 
         /**
@@ -177,8 +192,16 @@
          * Return the length of the queue
          */
         length() {
-            return this._queue.length + (this._running === null ? 0 : 1);
+            return this._queue.length + this.running();
         }
+
+        /**
+         * Return the amount of tasks currently running.
+         */
+        running() {
+            return this._options.workers - this._idle.size;
+        }
+
 
         /**
          * Return True if the queue is busy, either running or with waiting
@@ -210,6 +233,28 @@
             return this._rolling.promise;
         }
 
+        /**
+         * Return true if the queue is paused.
+         */
+        paused() {
+            return this._paused;
+        }
+
+        /**
+         * Pause the queue.  No tasks are going to be run.
+         */
+        pause() {
+            this._paused = true;
+        }
+
+        /**
+         * Resume the queue.
+         */
+        resume() {
+            this._paused = false;
+            this._run();
+        }
+
         _setup_rolling_promise() {
             let self = this;
             self._rolling = {
@@ -232,12 +277,14 @@
          * After the action is finished, request to run the next one.
          */
         _run() {
-            if (this._running === null && this._queue.length > 0) {
+            if (!this.paused() && this._idle.size > 0 && this._queue.length > 0) {
                 let { fn, connectors, extra } = this._queue.shift();
                 let promise = fn();
-                this._running = { promise: promise, connectors: connectors, extra: extra };
+                let running = { promise: promise, connectors: connectors, extra: extra };
+                let index = this._acquire(running);
                 let self = this;
                 promise.then(function (...result) {
+                    self._release(index);  /// Release the worker ASAP.
                     try {
                         connectors.resolve(...result);
                     } catch (e) {
@@ -246,8 +293,8 @@
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
-                    let extra = (self._running !== null) ? self._running.extra : [];
 
+                    let extra = running.extra || [];
                     if (self._rolling !== null) {
                         let rolling_resolve = self._rolling.resolve;
                         if (typeof rolling_resolve != "undefined" && rolling_resolve !== null) {
@@ -259,8 +306,6 @@
                         }
                         self._rolling = null;
                     }
-
-                    self._running = null;
                     self._thens.forEach(function (fn) {
                         try {
                             fn.apply(self, result.concat(extra));
@@ -277,6 +322,7 @@
                     });
                     self._run();
                 }).catch(function (...result) {
+                    self._release(index);  /// Release the worker ASAP.
                     try {
                         connectors.reject(...result);
                     } catch (e) {
@@ -285,8 +331,8 @@
                     if (result.length == 1 && (typeof result[0]) === "undefined") {
                         result = [];
                     }
-                    let extra = (self._running !== null) ? self._running.extra : [];
 
+                    let extra = running.extra || [];
                     if (self._rolling !== null) {
                         let rolling_reject = self._rolling.reject;
                         if (typeof rolling_reject != "undefined" && rolling_reject !== null) {
@@ -298,8 +344,6 @@
                         }
                         self._rolling = null;
                     }
-
-                    self._running = null;
                     self._catchs.forEach(function (fn) {
                         try {
                             fn.apply(self, result.concat(extra));
@@ -316,11 +360,14 @@
                     });
                     self._run();
                 });
+                /// This call is needed to fill the next worker if some is
+                /// idle.
+                self._run();
             }
         }
 
         /**
-         * Cancel the running action if any.
+         * Cancel all running actions if any.
          *
          * If the underlying promise has a `cancel` function, call it.  Fallback
          * to `abort`.
@@ -328,12 +375,12 @@
          * Call registered callbacks (oncancel and finally).
          */
         _cancel_running() {
-            if (this._running !== null) {
+            for (const action of Object.values(this._workers)) {
                 // Some promises reject when cancelled, we let's avoid
                 // rejecting the queue's promise in such cases, because our
                 // API states that we won't reject the promise when cancelling
                 // an action.
-                let promise = this._running.promise;
+                let promise = action.promise;
                 try {
                     if (typeof promise.cancel === "function") {
                         promise.cancel();
@@ -344,9 +391,11 @@
                 } catch (e) {
                     console.error(e);
                 }
-                this._cancel_action(this._running);
-                this._running = null;
+                this._cancel_action(action);
             }
+            this._workers = {};
+            this._idle = new Set();
+            [...Array(this._options.workers).keys()].map(x => this._idle.add(x));
         }
 
         /**
@@ -375,6 +424,19 @@
                     console.error(e);
                 }
             });
+        }
+
+        _acquire(item) {
+            let values = this._idle.values();
+            let result = values.next().value;
+            this._idle.delete(result);
+            this._workers[result] = item;
+            return result;
+        }
+
+        _release(index) {
+            delete this._workers[index];
+            this._idle.add(index);
         }
     }
 
