@@ -6,6 +6,6 @@ test: pnpm-lock.yaml
 	@pnpm run test
 
 caddy: pnpm-lock.yaml
-	@caddy file-server -browse -listen ':9999' -root .
+	@caddy file-server --browse --listen ':9999' --root .
 
 .PHONY: test

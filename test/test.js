@@ -70,7 +70,7 @@ QUnit.test('LIFO queue scenario without cancelation', function (assert) {
     assert.timeout(TOTAL_TIME + 500);
     const done = assert.async();
     queue.then(function () {
-        if (queue._queue.length === 0 && queue._running === null) {
+        if (!queue.busy()) {
             // The first job will be run inmediately, but the next ones will
             // be actually LIFO.
             expected = [...Array(LENGTH).keys()];
@@ -113,7 +113,7 @@ let buildFIFOScenario = function (createPromises) {
         assert.timeout(TOTAL_TIME + 500);
         const done = assert.async();
         queue.then(function () {
-            if (queue._queue.length === 0 && queue._running === null) {
+            if (!queue.busy()) {
                 // In this scenario the first action is run inmediately
                 assert.equal(instances.shift(), 0);
                 // but then the remaining actions are queue but the last action
@@ -268,4 +268,82 @@ QUnit.test('No promises, ma!', function (assert) {
     assert.ok(typeof queue.append(action) === "undefined");
     assert.ok(typeof queue.prepend(action) === "undefined");
     assert.ok(typeof queue.replace(action) === "undefined");
+});
+
+
+QUnit.test('Workers with FIFO pattern', function (assert) {
+    const WORKERS = 5;
+    const LENGTH = 50;
+    const ACTION_TIME = 200;
+    const TOTAL_TIME = LENGTH * ACTION_TIME / WORKERS + ACTION_TIME;
+
+    var siblings = 0;
+    let queue = new ActionQueue({ workers: WORKERS });
+    assert.expect(1);
+    assert.timeout(TOTAL_TIME);
+    let done = assert.async();
+    queue.then(() => {
+        if (!queue.busy()) {
+            /// We won't be able to actually see WORKERS here because, when
+            // the action get's scheduled at most WORKERS - 1 can be running,
+            // otherwise the won't be an available worker for the new task to
+            // run.
+            assert.true(siblings === WORKERS - 1);
+            done();
+        }
+    });
+    queue.pause();
+
+    function action(index) {
+        let running = queue.running();
+        if (running > siblings) {
+            siblings = running;
+        }
+        return TimedPromise(ACTION_TIME).then(
+            () => console.log("Action done", index)
+        );
+    }
+
+    for (var i = 0; i < LENGTH; i++) {
+        queue.append(_.partial(action, i), i);
+    }
+    queue.resume();
+});
+
+QUnit.test('Workers with LIFO pattern', function (assert) {
+    const WORKERS = 5;
+    const LENGTH = 50;
+    const ACTION_TIME = 140;
+    const TOTAL_TIME = LENGTH * ACTION_TIME / WORKERS + ACTION_TIME;
+
+    var siblings = 0;
+    let queue = new ActionQueue({ workers: WORKERS });
+    assert.expect(1);
+    assert.timeout(TOTAL_TIME);
+    let done = assert.async();
+    queue.then(() => {
+        if (!queue.busy()) {
+            /// We won't be able to actually see WORKERS here because, when
+            // the action get's scheduled at most WORKERS - 1 can be running,
+            // otherwise the won't be an available worker for the new task to
+            // run.
+            assert.true(siblings === WORKERS - 1);
+            done();
+        }
+    });
+
+    function action(index) {
+        let running = queue.running();
+        if (running > siblings) {
+            siblings = running;
+        }
+        return TimedPromise(ACTION_TIME).then(
+            () => console.log("Action done", index)
+        );
+    }
+
+    for (var i = 0; i < LENGTH; i++) {
+        queue.prepend(_.partial(action, i), i);
+    }
+    queue.resume();
 });
