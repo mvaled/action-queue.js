@@ -358,6 +358,31 @@
         queue.resume();
       });
 
+      QUnit.test("Cancelling with replace, rejects", function (assert) {
+        const ACTION_TIME = 50;  // ms
+
+        let queue = new ActionQueue();
+        queue.pause();
+        assert.expect(1);
+        assert.rejects(queue.append(() => TimedPromise(ACTION_TIME)));
+        queue.replace(() => TimedPromise(ACTION_TIME));
+      });
+
+
+      QUnit.test("Cancelling with replace, doesn't reject if rejectCanceled is false", function (assert) {
+        const ACTION_TIME = 200;  // ms
+        let queue = new ActionQueue({ rejectCanceled: false });
+        queue.pause();
+
+        let promise = queue.append(() => TimedPromise(ACTION_TIME));
+        promise.catch(function () { throw new Error("Should not be rejected"); });
+
+        assert.expect(0);
+        let done = assert.async();
+        queue.replace(() => TimedPromise(ACTION_TIME).then(done));
+        queue.resume();
+      });
+
     });
   </script>
 </body>
