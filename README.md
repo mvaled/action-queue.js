@@ -14,6 +14,15 @@ Creates a new action queue.  You can pass an object with options:
    'append', 'prepend' and 'replace' should create and promises.
    Defaults to true.
 
+- `rejectCanceled`, it should be a bool to indicate if we reject the promises
+  (if `createPromises` is also true) that are cancelled while still in the
+  queue.  See the methods `replace` and `clear` below.
+
+- `workers`, if present it should a small integer to indicate the
+  amount of actions the queue can run concurrently.  We advice that you
+  really small number: max. 10.  The default is 1, which means no
+  concurrency.  Ignored if not a number, or smaller than 1.
+
 
 ### `append(fn, ...args)`
 

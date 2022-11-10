@@ -1,5 +1,3 @@
-// -*- mode: js2; -*-
-
 (function () {
     /**
      * A collector and runner of coordinated actions.
@@ -16,23 +14,30 @@
      *    'append', 'prepend' and 'replace' should create and promises.
      *    Defaults to true.
      *
+     * - `rejectCanceled`, it should be a bool to indicate if we should reject
+     *   the promises of canceled actions.  The default is true.
+     *
      * - `workers`, if present it should a small integer to indicate the
      *   amount of actions the queue can run concurrently.  We advice that you
      *   really small number: max. 10.  The default is 1, which means no
      *   concurrency.
-     *
      */
     class ActionQueue {
         constructor(options) {
             if (typeof options !== "undefined") {
                 this._options = {
-                    createPromises: !!options.createPromises,
+                    createPromises: typeof options.createPromises == "boolean" ? options.createPromises : true,
+                    rejectCanceled: typeof options.rejectCanceled == "boolean" ? options.rejectCanceled : true,
                     workers: typeof options.workers == "number" &&
                         options.workers > 1
                         ? options.workers : 1,
                 };
             } else {
-                this._options = { createPromises: true, workers: 1 };
+              this._options = {
+                createPromises: true,
+                workers: 1,
+                rejectCanceled: true
+              };
             }
 
             // The subscribed callbacks
@@ -180,7 +185,7 @@
          */
         clear() {
             let pending = this._queue.concat();
-            while (this._queue.length > 0) { this._queue.shift(); }
+            this._queue.splice(0, this._queue.length);
             this._cancel_running();
             while (pending.length > 0) {
                 let action = pending.shift();
@@ -402,11 +407,13 @@
          * Call the cancelled and finally callbacks for the action.
          */
         _cancel_action(action) {
-            try {
-                action.connectors.reject(new Error("Action was cancelled"));
-            }
-            catch (e) {
-                console.error(e);
+            if (this._options.rejectCanceled) {
+                try {
+                    action.connectors.reject(new Error("Action was cancelled"));
+                }
+                catch (e) {
+                    console.error(e);
+                }
             }
             let extra = action.extra;
             let self = this;
@@ -443,6 +450,7 @@
     this.ActionQueue = ActionQueue;
 
 }).apply(this);
+
 // Local Variables:
 // js-indent-level: 4
 // End:
