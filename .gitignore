@@ -3,3 +3,6 @@ node_modules/
 .log/
 pnpm-lock.yaml
 yarn.lock
+.npmrc
+.envrc
+yarn-error.log
