@@ -1,11 +1,11 @@
 PATH := ./node_modules/.bin/:$(PATH)
-pnpm-lock.yaml: package.json
-	@pnpm install
+yarn.lock: package.json
+	@yarn install
 
-test: pnpm-lock.yaml
-	@pnpm run test
+test: yarn.lock
+	@yarn run test
 
-caddy: pnpm-lock.yaml
+caddy: yarn.lock
 	@caddy file-server --browse --listen ':9999' --root .
 
 .PHONY: test

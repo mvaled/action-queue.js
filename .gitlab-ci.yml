@@ -5,10 +5,9 @@ run all tests:
   image: node:buster-slim
   interruptible: true
   before_script:
-    - npm install -g pnpm
-    - pnpm install
+    - yarn install
   script:
-    - pnpm run test
+    - yarn run test
   cache:
     paths:
       - node_modules
