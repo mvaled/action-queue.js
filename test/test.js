@@ -373,3 +373,33 @@ QUnit.test("Cancelling with replace, doesn't reject if rejectCanceled is false",
   queue.replace(() => TimedPromise(ACTION_TIME).then(done));
   queue.resume();
 });
+
+
+QUnit.test("Getting info", function (assert) {
+  const ACTION_TIME = 200;  // ms
+  let queue = new ActionQueue({ workers: 2, rejectCanceled: false, createPromises: true });
+  queue.pause();
+
+  assert.expect(2);
+  let promise = queue.append(() =>
+    TimedPromise(ACTION_TIME).then(_ => {
+      console.log("Queue Info", queue.info());
+
+      let {running, pending} = queue.info();
+      assert.deepEqual(running.map(({args}) => args), [[1], [2]]);
+      assert.deepEqual(pending.map(({args}) => args), [[3], [4]]);
+
+      queue.clear();
+      done();
+    }),
+    1
+  );
+
+  queue.append(() => TimedPromise(ACTION_TIME), 2);
+  queue.append(() => TimedPromise(ACTION_TIME), 3);
+  queue.append(() => TimedPromise(ACTION_TIME), 4);
+
+  promise.catch(function () { throw new Error("Should not be rejected"); });
+  let done = assert.async();
+  queue.resume();
+});
