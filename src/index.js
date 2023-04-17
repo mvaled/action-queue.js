@@ -134,13 +134,16 @@ export class ActionQueue {
             promise = undefined;
         }
 
-        let self = this;
         let item = {
             fn: fn,
             connectors: connectors,
             extra: extra,
             external_promise: promise,
             inner_promise: undefined,
+            cancelled: false,
+            cancel: () => {
+                this._cancel_action(item);
+            }
         };
         return item
     }
@@ -254,8 +257,7 @@ export class ActionQueue {
     info() {
         let map = function(d) {
             let {promise, extra} = d;
-            /// TODO: promise, cancel: () => {}
-            return {args: extra};
+            return {args: extra, cancel: d.cancel, promise: d.external_promise};
         }
 
         const workers = Object.values(this._workers);
@@ -290,7 +292,11 @@ export class ActionQueue {
     _run() {
         if (!this.paused() && this._idle.size > 0 && this._queue.length > 0) {
             let running = this._queue.shift();
-            let { fn, connectors, extra } = running;
+            let { fn, connectors, extra, cancelled } = running;
+            if (cancelled) {
+                this._run();
+                return;
+            }
 
             let inner_promise = fn();
             running.inner_promise = inner_promise;
@@ -415,6 +421,7 @@ export class ActionQueue {
      * Call the cancelled and finally callbacks for the action.
      */
     _cancel_action(action) {
+        action.cancelled = true;
         if (this._options.rejectCanceled) {
             try {
                 action.connectors.reject(new Error("Action was cancelled"));
