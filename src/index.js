@@ -94,19 +94,10 @@ export class ActionQueue {
      * If `createPromises` is false, return undefined.
      */
     prepend(fn, ...extra) {
-        let connectors = { resolve: () => {}, reject: () => {} };
-        let result;
-        if (this._options.createPromises) {
-            result = new Promise(function (resolve, reject) {
-                connectors.resolve = resolve;
-                connectors.reject = reject;
-            });
-        } else {
-            result = undefined;
-        }
-        this._queue = [{ fn: fn, connectors: connectors, extra: extra }].concat(this._queue);
+        let item = this._build_action(fn, extra)
+        this._queue.splice(0, 0, item);
         this._run();
-        return result;
+        return item.external_promise;
     }
 
     /**
@@ -124,19 +115,37 @@ export class ActionQueue {
      * If `createPromises` is false, return undefined.
      */
     append(fn, ...extra) {
+        let item = this._build_action(fn, extra)
+        this._queue.push(item);
+        this._run();
+        return item.external_promise;
+    }
+
+    _build_action(fn, extra) {
         let connectors = { resolve: () => {}, reject: () => {} };
-        let result;
+
+        let promise;
         if (this._options.createPromises) {
-            result = new Promise(function (resolve, reject) {
+            promise = new Promise(function (resolve, reject) {
                 connectors.resolve = resolve;
                 connectors.reject = reject;
             });
         } else {
-            result = undefined;
+            promise = undefined;
         }
-        this._queue.push({ fn: fn, connectors: connectors, extra: extra });
-        this._run();
-        return result;
+
+        let item = {
+            fn: fn,
+            connectors: connectors,
+            extra: extra,
+            external_promise: promise,
+            inner_promise: undefined,
+            cancelled: false,
+            cancel: () => {
+                this._cancel_action(item);
+            }
+        };
+        return item
     }
 
     /**
@@ -236,6 +245,29 @@ export class ActionQueue {
         this._run();
     }
 
+    /**
+     * Return an object with the running and pending jobs in the queue.
+     *
+     * The result is an object with two properties: 'running' and 'pending'.
+     * Each is an array of objects the a single property `args`; which is an
+     * array (possibly empty) with the extra arguments passed to `append`,
+     * `prepend` or `replace`.
+     *
+     */
+    info() {
+        let map = function(d) {
+            let {promise, extra} = d;
+            return {args: extra, cancel: d.cancel, promise: d.external_promise};
+        }
+
+        const workers = Object.values(this._workers);
+        const queue = ([]).concat(this._queue);
+        return {
+            running: workers.map(map),
+            pending: queue.map(map)
+        };
+    }
+
     _setup_rolling_promise() {
         let self = this;
         self._rolling = {
@@ -259,12 +291,19 @@ export class ActionQueue {
      */
     _run() {
         if (!this.paused() && this._idle.size > 0 && this._queue.length > 0) {
-            let { fn, connectors, extra } = this._queue.shift();
-            let promise = fn();
-            let running = { promise: promise, connectors: connectors, extra: extra };
+            let running = this._queue.shift();
+            let { fn, connectors, extra, cancelled } = running;
+            if (cancelled) {
+                this._run();
+                return;
+            }
+
+            let inner_promise = fn();
+            running.inner_promise = inner_promise;
+
             let index = this._acquire(running);
             let self = this;
-            promise.then(function (...result) {
+            inner_promise.then(function (...result) {
                 self._release(index);  /// Release the worker ASAP.
                 try {
                     connectors.resolve(...result);
@@ -341,8 +380,7 @@ export class ActionQueue {
                 });
                 self._run();
             });
-            /// This call is needed to fill the next worker if some is
-            /// idle.
+            /// This call is needed to fill the next worker if some is idle.
             self._run();
         }
     }
@@ -361,7 +399,7 @@ export class ActionQueue {
             // rejecting the queue's promise in such cases, because our
             // API states that we won't reject the promise when cancelling
             // an action.
-            let promise = action.promise;
+            let promise = action.inner_promise;
             try {
                 if (typeof promise.cancel === "function") {
                     promise.cancel();
@@ -383,6 +421,7 @@ export class ActionQueue {
      * Call the cancelled and finally callbacks for the action.
      */
     _cancel_action(action) {
+        action.cancelled = true;
         if (this._options.rejectCanceled) {
             try {
                 action.connectors.reject(new Error("Action was cancelled"));
