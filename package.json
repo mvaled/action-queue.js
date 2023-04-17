@@ -2,13 +2,15 @@
   "name": "@merchise/action-queue",
   "version": "3.0.1",
   "description": "A coordinated non-concurrent queue of actions",
-  "main": "src/queue.js",
+  "main": "src/index.js",
+  "type": "module",
   "directories": {
     "test": "tests"
   },
   "devDependencies": {
     "qunit": "^2.19.0",
-    "underscore": "^1.12.0"
+    "underscore": "^1.13.6",
+    "vite": "^4.2.1"
   },
   "scripts": {
     "test": "qunit"
