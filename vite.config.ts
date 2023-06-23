@@ -8,7 +8,7 @@ export default defineConfig(({command, mode}) => {
       minify: mode == "production",
       lib: {
         entry: path.resolve(__dirname, 'src/index.js'),
-        name: 'action-queue',
+        name: '@merchise/action-queue',
         fileName: (format) => mode == "production" ? `action-queue.${format}.min.js` : `action-queue.${format}.js`
       }
     },
