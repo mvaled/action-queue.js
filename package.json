@@ -1,6 +1,6 @@
 {
   "name": "@merchise/action-queue",
-  "version": "4.2.0-alpha.3",
+  "version": "4.2.0",
   "description": "A coordinated queue of actions",
   "files": [
     "dist"
