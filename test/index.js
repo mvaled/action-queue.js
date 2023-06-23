@@ -1,3 +1,4 @@
+import * as QUnit from "qunit";
 import { ActionQueue } from '../src/index.js';
 import { CancelablePromise } from './CancelablePromise.js';
 import _ from 'underscore';

@@ -2,18 +2,30 @@
   "name": "@merchise/action-queue",
   "version": "4.1.0",
   "description": "A coordinated non-concurrent queue of actions",
-  "main": "src/index.js",
-  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/action-queue.umd.js",
+  "module": "./dist/action-queue.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/action-queue.es.js",
+      "require": "./dist/action-queue.umd.js"
+    }
+  },
   "directories": {
     "test": "tests"
   },
   "devDependencies": {
     "qunit": "^2.19.0",
     "underscore": "^1.13.6",
-    "vite": "^4.2.1"
+    "vite": "^4.3.9"
   },
   "scripts": {
-    "test": "qunit"
+    "test": "qunit",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "repository": {
     "type": "git",
