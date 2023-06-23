@@ -16,3 +16,4 @@ run all tests:
   only:
     - main
     - merge_requests
+  coverage: "/All files[^|]*\|[^|]*\s+([\d\.]+)/"
