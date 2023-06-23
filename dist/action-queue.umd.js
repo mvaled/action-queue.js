@@ -1,1 +1,425 @@
-(function(u,_){typeof exports=="object"&&typeof module<"u"?_(exports):typeof define=="function"&&define.amd?define(["exports"],_):(u=typeof globalThis<"u"?globalThis:u||self,_(u["action-queue"]={}))})(this,function(u){"use strict";class _{constructor(e){typeof e<"u"?this._options={createPromises:typeof e.createPromises=="boolean"?e.createPromises:!0,rejectCanceled:typeof e.rejectCanceled=="boolean"?e.rejectCanceled:!0,workers:typeof e.workers=="number"&&e.workers>1?e.workers:1}:this._options={createPromises:!0,workers:1,rejectCanceled:!0},this._thens=[],this._catchs=[],this._finallys=[],this._cancels=[],this._paused=!1,this._queue=[],this._rolling=null,this._workers={},this._idle=new Set,[...Array(this._options.workers).keys()].map(t=>this._idle.add(t))}then(e){this._thens.push(e)}catch(e){this._catchs.push(e)}finally(e){this._finallys.push(e)}oncancel(e){this._cancels.push(e)}prepend(e,...t){let n=this._build_action(e,t);return this._queue.splice(0,0,n),this._run(),n.external_promise}append(e,...t){let n=this._build_action(e,t);return this._queue.push(n),this._run(),n.external_promise}_build_action(e,t){let n={resolve:()=>{},reject:()=>{}},l;this._options.createPromises?l=new Promise(function(h,f){n.resolve=h,n.reject=f}):l=void 0;let c={fn:e,connectors:n,extra:t,external_promise:l,inner_promise:void 0,cancelled:!1,cancel:()=>{this._cancel_action(c)}};return c}replace(e,...t){return this.clear(),this.append(e,...t)}clear(){let e=this._queue.concat();for(this._queue.splice(0,this._queue.length),this._cancel_running();e.length>0;){let t=e.shift();this._cancel_action(t)}}length(){return this._queue.length+this.running()}running(){return this._options.workers-this._idle.size}busy(){return this.length()>0}promise(){return this._rolling===null&&this._setup_rolling_promise(),this._rolling.promise}paused(){return this._paused}pause(){this._paused=!0}resume(){this._paused=!1,this._run()}info(){let e=function(l){let{promise:c,extra:h}=l;return{args:h,cancel:l.cancel,promise:l.external_promise}};const t=Object.values(this._workers),n=[].concat(this._queue);return{running:t.map(e),pending:n.map(e)}}_setup_rolling_promise(){let e=this;e._rolling={promise:null,resolve:null,reject:null},e._rolling.promise=new Promise(function(t,n){e._rolling.resolve=t,e._rolling.reject=n})}_run(){if(!this.paused()&&this._idle.size>0&&this._queue.length>0){let e=this._queue.shift(),{fn:t,connectors:n,extra:l,cancelled:c}=e;if(c){this._run();return}let h=t();e.inner_promise=h;let f=this._acquire(e),r=this;h.then(function(...s){r._release(f);try{n.resolve(...s)}catch(i){console.error(i)}s.length==1&&typeof s[0]>"u"&&(s=[]);let a=e.extra||[];if(r._rolling!==null){let i=r._rolling.resolve;if(typeof i<"u"&&i!==null)try{i.apply(r,s.concat(a))}catch(o){console.error(o)}r._rolling=null}r._thens.forEach(function(i){try{i.apply(r,s.concat(a))}catch(o){console.error(o)}}),r._finallys.forEach(function(i){try{i.apply(r,s.concat(a))}catch(o){console.error(o)}}),r._run()}).catch(function(...s){r._release(f);try{n.reject(...s)}catch(i){console.error(i)}s.length==1&&typeof s[0]>"u"&&(s=[]);let a=e.extra||[];if(r._rolling!==null){let i=r._rolling.reject;if(typeof i<"u"&&i!==null)try{i.apply(r,s.concat(a))}catch(o){console.error(o)}r._rolling=null}r._catchs.forEach(function(i){try{i.apply(r,s.concat(a))}catch(o){console.error(o)}}),r._finallys.forEach(function(i){try{i.apply(r,s.concat(a))}catch(o){console.error(o)}}),r._run()}),r._run()}}_cancel_running(){for(const e of Object.values(this._workers)){let t=e.inner_promise;try{typeof t.cancel=="function"?t.cancel():typeof t.abort=="function"&&t.abort()}catch(n){console.error(n)}this._cancel_action(e)}this._workers={},this._idle=new Set,[...Array(this._options.workers).keys()].map(e=>this._idle.add(e))}_cancel_action(e){if(e.cancelled=!0,this._options.rejectCanceled)try{e.connectors.reject(new Error("Action was cancelled"))}catch(l){console.error(l)}let t=e.extra,n=this;this._cancels.forEach(function(l){try{l.apply(n,t)}catch(c){console.error(c)}}),this._finallys.forEach(function(l){try{l.apply(n,t)}catch(c){console.error(c)}})}_acquire(e){let n=this._idle.values().next().value;return this._idle.delete(n),this._workers[n]=e,n}_release(e){delete this._workers[e],this._idle.add(e)}}u.ActionQueue=_,Object.defineProperty(u,Symbol.toStringTag,{value:"Module"})});
+(function(global, factory) {
+  typeof exports === "object" && typeof module !== "undefined" ? factory(exports) : typeof define === "function" && define.amd ? define(["exports"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global["action-queue"] = {}));
+})(this, function(exports2) {
+  "use strict";
+  class ActionQueue {
+    constructor(options) {
+      if (typeof options !== "undefined") {
+        this._options = {
+          createPromises: typeof options.createPromises == "boolean" ? options.createPromises : true,
+          rejectCanceled: typeof options.rejectCanceled == "boolean" ? options.rejectCanceled : true,
+          workers: typeof options.workers == "number" && options.workers > 1 ? options.workers : 1
+        };
+      } else {
+        this._options = {
+          createPromises: true,
+          workers: 1,
+          rejectCanceled: true
+        };
+      }
+      this._thens = [];
+      this._catchs = [];
+      this._finallys = [];
+      this._cancels = [];
+      this._paused = false;
+      this._queue = [];
+      this._rolling = null;
+      this._workers = {};
+      this._idle = /* @__PURE__ */ new Set();
+      [...Array(this._options.workers).keys()].map((x) => this._idle.add(x));
+    }
+    /**
+     * Register an new callback to call when any of the actions in the queue
+     * is completed and not canceled.
+     *
+     * @param {function} callback
+     */
+    then(callback) {
+      this._thens.push(callback);
+    }
+    /**
+     * Register a new callback to call when any of the actions in the queue
+     * is rejected without being cancelled.
+     *
+     * @param {function} callback
+     */
+    catch(callback) {
+      this._catchs.push(callback);
+    }
+    /**
+     * Register a new callback which is going to be called when any of the
+     * actions in the queue is either completed, rejected or cancelled.
+     *
+     * These callbacks are always called after the other (more specific)
+     * callbacks.
+     *
+     * @param {function} callback
+     */
+    finally(callback) {
+      this._finallys.push(callback);
+    }
+    /**
+     * Register a new callback which is going to be called when any of the
+     * actions in the queue is cancelled.
+     *
+     * @param {function} callback
+     */
+    oncancel(callback) {
+      this._cancels.push(callback);
+    }
+    /**
+     * Insert the action at the beginning of the queue.  If a current action
+     * is already running don't cancel it, instead queue the given action to
+     * be run later but before any other action in the queue.
+     *
+     * @param {function} fn The action to perform
+     * @param {boolean} force
+     * @param  {...any} extra Extra arguments to pass to callbacks
+     *
+     * If the option `createPromises` is true, return a promise that is
+     * equivalent to the one that would be returned by the action after it
+     * starts running.  This promise will resolve only if/when the action
+     * runs and resolves, and it will reject when the action rejects or is
+     * cancelled.
+     *
+     * If `createPromises` is false, return undefined.
+     */
+    prepend(fn, ...extra) {
+      let item = this._build_action(fn, extra);
+      this._queue.splice(0, 0, item);
+      this._run();
+      return item.external_promise;
+    }
+    /**
+     * Insert the action at the end of the queue.
+     *
+     * @param {function} fn The action to perform
+     * @param  {...any} extra Extra arguments to pass to callbacks
+     *
+     * If the option `createPromises` is true, return a promise that is
+     * equivalent to the one that would be returned by the action after it
+     * starts running.  This promise will resolve only if/when the action
+     * runs and resolves, and it will reject when the action rejects or is
+     * cancelled.
+     *
+     * If `createPromises` is false, return undefined.
+     */
+    append(fn, ...extra) {
+      let item = this._build_action(fn, extra);
+      this._queue.push(item);
+      this._run();
+      return item.external_promise;
+    }
+    _build_action(fn, extra) {
+      let connectors = { resolve: () => {
+      }, reject: () => {
+      } };
+      let promise;
+      if (this._options.createPromises) {
+        promise = new Promise(function(resolve, reject) {
+          connectors.resolve = resolve;
+          connectors.reject = reject;
+        });
+      } else {
+        promise = void 0;
+      }
+      let item = {
+        fn,
+        connectors,
+        extra,
+        external_promise: promise,
+        inner_promise: void 0,
+        cancelled: false,
+        cancel: () => {
+          this._cancel_action(item);
+        }
+      };
+      return item;
+    }
+    /**
+     * Replaces the entire queue with the given action.  Cancel pending and
+     * running actions.
+     *
+     * @param {function} fn The action to perform
+     * @param  {...any} extra Extra arguments to pass to callbacks
+     *
+     * Returns a promise that is equivalent to the one that would be
+     * returned by the action after it starts running.  This promise will
+     * resolve only if/when the action runs and resolves, and it will
+     * reject when the action rejects or is cancelled.
+     */
+    replace(fn, ...extra) {
+      this.clear();
+      return this.append(fn, ...extra);
+    }
+    /**
+     * Clear the entire queue.  Cancel pending and running actions.
+     */
+    clear() {
+      let pending = this._queue.concat();
+      this._queue.splice(0, this._queue.length);
+      this._cancel_running();
+      while (pending.length > 0) {
+        let action = pending.shift();
+        this._cancel_action(action);
+      }
+    }
+    /**
+     * Return the length of the queue
+     */
+    length() {
+      return this._queue.length + this.running();
+    }
+    /**
+     * Return the amount of tasks currently running.
+     */
+    running() {
+      return this._options.workers - this._idle.size;
+    }
+    /**
+     * Return True if the queue is busy, either running or with waiting
+     * actions.
+     */
+    busy() {
+      return this.length() > 0;
+    }
+    /**
+     * Return a promise that resolves/rejects just as soon as the first
+     * pending action resolves/rejects.
+     *
+     * Cancelations don't affect the promise.  If the running action gets
+     * cancelled midway, this promise will take over on the next action.
+     * If no action is scheduled to be next, we wait.
+     *
+     * The only way this promise is rejected, is if the running action is
+     * rejected.  The only way this promise is resolved, is when the
+     * running action is resolved.
+     *
+     * When the same queue is used several times, calls to promise may
+     * return different promises.
+     */
+    promise() {
+      if (this._rolling === null)
+        this._setup_rolling_promise();
+      return this._rolling.promise;
+    }
+    /**
+     * Return true if the queue is paused.
+     */
+    paused() {
+      return this._paused;
+    }
+    /**
+     * Pause the queue.  No tasks are going to be run.
+     */
+    pause() {
+      this._paused = true;
+    }
+    /**
+     * Resume the queue.
+     */
+    resume() {
+      this._paused = false;
+      this._run();
+    }
+    /**
+     * Return an object with the running and pending jobs in the queue.
+     *
+     * The result is an object with two properties: 'running' and 'pending'.
+     * Each is an array of objects the a single property `args`; which is an
+     * array (possibly empty) with the extra arguments passed to `append`,
+     * `prepend` or `replace`.
+     *
+     */
+    info() {
+      let map = function(d) {
+        let { promise, extra } = d;
+        return { args: extra, cancel: d.cancel, promise: d.external_promise };
+      };
+      const workers = Object.values(this._workers);
+      const queue = [].concat(this._queue);
+      return {
+        running: workers.map(map),
+        pending: queue.map(map)
+      };
+    }
+    _setup_rolling_promise() {
+      let self2 = this;
+      self2._rolling = {
+        promise: null,
+        resolve: null,
+        reject: null
+      };
+      self2._rolling.promise = new Promise(function(resolve, reject) {
+        self2._rolling.resolve = resolve;
+        self2._rolling.reject = reject;
+      });
+    }
+    /**
+     * Run the next action in the queue.
+     *
+     * If there's an action running already or if the queue is empty, ignore
+     * the request.
+     *
+     * After the action is finished, request to run the next one.
+     */
+    _run() {
+      if (!this.paused() && this._idle.size > 0 && this._queue.length > 0) {
+        let running = this._queue.shift();
+        let { fn, connectors, extra, cancelled } = running;
+        if (cancelled) {
+          this._run();
+          return;
+        }
+        let inner_promise = fn();
+        running.inner_promise = inner_promise;
+        let index = this._acquire(running);
+        let self2 = this;
+        inner_promise.then(function(...result) {
+          self2._release(index);
+          try {
+            connectors.resolve(...result);
+          } catch (e) {
+            console.error(e);
+          }
+          if (result.length == 1 && typeof result[0] === "undefined") {
+            result = [];
+          }
+          let extra2 = running.extra || [];
+          if (self2._rolling !== null) {
+            let rolling_resolve = self2._rolling.resolve;
+            if (typeof rolling_resolve != "undefined" && rolling_resolve !== null) {
+              try {
+                rolling_resolve.apply(self2, result.concat(extra2));
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            self2._rolling = null;
+          }
+          self2._thens.forEach(function(fn2) {
+            try {
+              fn2.apply(self2, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
+            }
+          });
+          self2._finallys.forEach(function(fn2) {
+            try {
+              fn2.apply(self2, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
+            }
+          });
+          self2._run();
+        }).catch(function(...result) {
+          self2._release(index);
+          try {
+            connectors.reject(...result);
+          } catch (e) {
+            console.error(e);
+          }
+          if (result.length == 1 && typeof result[0] === "undefined") {
+            result = [];
+          }
+          let extra2 = running.extra || [];
+          if (self2._rolling !== null) {
+            let rolling_reject = self2._rolling.reject;
+            if (typeof rolling_reject != "undefined" && rolling_reject !== null) {
+              try {
+                rolling_reject.apply(self2, result.concat(extra2));
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            self2._rolling = null;
+          }
+          self2._catchs.forEach(function(fn2) {
+            try {
+              fn2.apply(self2, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
+            }
+          });
+          self2._finallys.forEach(function(fn2) {
+            try {
+              fn2.apply(self2, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
+            }
+          });
+          self2._run();
+        });
+        self2._run();
+      }
+    }
+    /**
+     * Cancel all running actions if any.
+     *
+     * If the underlying promise has a `cancel` function, call it.  Fallback
+     * to `abort`.
+     *
+     * Call registered callbacks (oncancel and finally).
+     */
+    _cancel_running() {
+      for (const action of Object.values(this._workers)) {
+        let promise = action.inner_promise;
+        try {
+          if (typeof promise.cancel === "function") {
+            promise.cancel();
+          } else if (typeof promise.abort === "function") {
+            promise.abort();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        this._cancel_action(action);
+      }
+      this._workers = {};
+      this._idle = /* @__PURE__ */ new Set();
+      [...Array(this._options.workers).keys()].map((x) => this._idle.add(x));
+    }
+    /**
+     * Call the cancelled and finally callbacks for the action.
+     */
+    _cancel_action(action) {
+      action.cancelled = true;
+      if (this._options.rejectCanceled) {
+        try {
+          action.connectors.reject(new Error("Action was cancelled"));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      let extra = action.extra;
+      let self2 = this;
+      this._cancels.forEach(function(fn) {
+        try {
+          fn.apply(self2, extra);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+      this._finallys.forEach(function(fn) {
+        try {
+          fn.apply(self2, extra);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    }
+    _acquire(item) {
+      let values = this._idle.values();
+      let result = values.next().value;
+      this._idle.delete(result);
+      this._workers[result] = item;
+      return result;
+    }
+    _release(index) {
+      delete this._workers[index];
+      this._idle.add(index);
+    }
+  }
+  exports2.ActionQueue = ActionQueue;
+  Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });
+});

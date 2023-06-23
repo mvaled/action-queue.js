@@ -1,14 +1,28 @@
-class p {
-  constructor(e) {
-    typeof e < "u" ? this._options = {
-      createPromises: typeof e.createPromises == "boolean" ? e.createPromises : !0,
-      rejectCanceled: typeof e.rejectCanceled == "boolean" ? e.rejectCanceled : !0,
-      workers: typeof e.workers == "number" && e.workers > 1 ? e.workers : 1
-    } : this._options = {
-      createPromises: !0,
-      workers: 1,
-      rejectCanceled: !0
-    }, this._thens = [], this._catchs = [], this._finallys = [], this._cancels = [], this._paused = !1, this._queue = [], this._rolling = null, this._workers = {}, this._idle = /* @__PURE__ */ new Set(), [...Array(this._options.workers).keys()].map((t) => this._idle.add(t));
+class ActionQueue {
+  constructor(options) {
+    if (typeof options !== "undefined") {
+      this._options = {
+        createPromises: typeof options.createPromises == "boolean" ? options.createPromises : true,
+        rejectCanceled: typeof options.rejectCanceled == "boolean" ? options.rejectCanceled : true,
+        workers: typeof options.workers == "number" && options.workers > 1 ? options.workers : 1
+      };
+    } else {
+      this._options = {
+        createPromises: true,
+        workers: 1,
+        rejectCanceled: true
+      };
+    }
+    this._thens = [];
+    this._catchs = [];
+    this._finallys = [];
+    this._cancels = [];
+    this._paused = false;
+    this._queue = [];
+    this._rolling = null;
+    this._workers = {};
+    this._idle = /* @__PURE__ */ new Set();
+    [...Array(this._options.workers).keys()].map((x) => this._idle.add(x));
   }
   /**
    * Register an new callback to call when any of the actions in the queue
@@ -16,8 +30,8 @@ class p {
    *
    * @param {function} callback
    */
-  then(e) {
-    this._thens.push(e);
+  then(callback) {
+    this._thens.push(callback);
   }
   /**
    * Register a new callback to call when any of the actions in the queue
@@ -25,8 +39,8 @@ class p {
    *
    * @param {function} callback
    */
-  catch(e) {
-    this._catchs.push(e);
+  catch(callback) {
+    this._catchs.push(callback);
   }
   /**
    * Register a new callback which is going to be called when any of the
@@ -37,8 +51,8 @@ class p {
    *
    * @param {function} callback
    */
-  finally(e) {
-    this._finallys.push(e);
+  finally(callback) {
+    this._finallys.push(callback);
   }
   /**
    * Register a new callback which is going to be called when any of the
@@ -46,8 +60,8 @@ class p {
    *
    * @param {function} callback
    */
-  oncancel(e) {
-    this._cancels.push(e);
+  oncancel(callback) {
+    this._cancels.push(callback);
   }
   /**
    * Insert the action at the beginning of the queue.  If a current action
@@ -66,9 +80,11 @@ class p {
    *
    * If `createPromises` is false, return undefined.
    */
-  prepend(e, ...t) {
-    let r = this._build_action(e, t);
-    return this._queue.splice(0, 0, r), this._run(), r.external_promise;
+  prepend(fn, ...extra) {
+    let item = this._build_action(fn, extra);
+    this._queue.splice(0, 0, item);
+    this._run();
+    return item.external_promise;
   }
   /**
    * Insert the action at the end of the queue.
@@ -84,29 +100,37 @@ class p {
    *
    * If `createPromises` is false, return undefined.
    */
-  append(e, ...t) {
-    let r = this._build_action(e, t);
-    return this._queue.push(r), this._run(), r.external_promise;
+  append(fn, ...extra) {
+    let item = this._build_action(fn, extra);
+    this._queue.push(item);
+    this._run();
+    return item.external_promise;
   }
-  _build_action(e, t) {
-    let r = { resolve: () => {
+  _build_action(fn, extra) {
+    let connectors = { resolve: () => {
     }, reject: () => {
-    } }, s;
-    this._options.createPromises ? s = new Promise(function(h, _) {
-      r.resolve = h, r.reject = _;
-    }) : s = void 0;
-    let o = {
-      fn: e,
-      connectors: r,
-      extra: t,
-      external_promise: s,
+    } };
+    let promise;
+    if (this._options.createPromises) {
+      promise = new Promise(function(resolve, reject) {
+        connectors.resolve = resolve;
+        connectors.reject = reject;
+      });
+    } else {
+      promise = void 0;
+    }
+    let item = {
+      fn,
+      connectors,
+      extra,
+      external_promise: promise,
       inner_promise: void 0,
-      cancelled: !1,
+      cancelled: false,
       cancel: () => {
-        this._cancel_action(o);
+        this._cancel_action(item);
       }
     };
-    return o;
+    return item;
   }
   /**
    * Replaces the entire queue with the given action.  Cancel pending and
@@ -120,17 +144,20 @@ class p {
    * resolve only if/when the action runs and resolves, and it will
    * reject when the action rejects or is cancelled.
    */
-  replace(e, ...t) {
-    return this.clear(), this.append(e, ...t);
+  replace(fn, ...extra) {
+    this.clear();
+    return this.append(fn, ...extra);
   }
   /**
    * Clear the entire queue.  Cancel pending and running actions.
    */
   clear() {
-    let e = this._queue.concat();
-    for (this._queue.splice(0, this._queue.length), this._cancel_running(); e.length > 0; ) {
-      let t = e.shift();
-      this._cancel_action(t);
+    let pending = this._queue.concat();
+    this._queue.splice(0, this._queue.length);
+    this._cancel_running();
+    while (pending.length > 0) {
+      let action = pending.shift();
+      this._cancel_action(action);
     }
   }
   /**
@@ -168,7 +195,9 @@ class p {
    * return different promises.
    */
   promise() {
-    return this._rolling === null && this._setup_rolling_promise(), this._rolling.promise;
+    if (this._rolling === null)
+      this._setup_rolling_promise();
+    return this._rolling.promise;
   }
   /**
    * Return true if the queue is paused.
@@ -180,13 +209,14 @@ class p {
    * Pause the queue.  No tasks are going to be run.
    */
   pause() {
-    this._paused = !0;
+    this._paused = true;
   }
   /**
    * Resume the queue.
    */
   resume() {
-    this._paused = !1, this._run();
+    this._paused = false;
+    this._run();
   }
   /**
    * Return an object with the running and pending jobs in the queue.
@@ -198,24 +228,27 @@ class p {
    *
    */
   info() {
-    let e = function(s) {
-      let { promise: o, extra: h } = s;
-      return { args: h, cancel: s.cancel, promise: s.external_promise };
+    let map = function(d) {
+      let { promise, extra } = d;
+      return { args: extra, cancel: d.cancel, promise: d.external_promise };
     };
-    const t = Object.values(this._workers), r = [].concat(this._queue);
+    const workers = Object.values(this._workers);
+    const queue = [].concat(this._queue);
     return {
-      running: t.map(e),
-      pending: r.map(e)
+      running: workers.map(map),
+      pending: queue.map(map)
     };
   }
   _setup_rolling_promise() {
-    let e = this;
-    e._rolling = {
+    let self = this;
+    self._rolling = {
       promise: null,
       resolve: null,
       reject: null
-    }, e._rolling.promise = new Promise(function(t, r) {
-      e._rolling.resolve = t, e._rolling.reject = r;
+    };
+    self._rolling.promise = new Promise(function(resolve, reject) {
+      self._rolling.resolve = resolve;
+      self._rolling.reject = reject;
     });
   }
   /**
@@ -228,79 +261,92 @@ class p {
    */
   _run() {
     if (!this.paused() && this._idle.size > 0 && this._queue.length > 0) {
-      let e = this._queue.shift(), { fn: t, connectors: r, extra: s, cancelled: o } = e;
-      if (o) {
+      let running = this._queue.shift();
+      let { fn, connectors, extra, cancelled } = running;
+      if (cancelled) {
         this._run();
         return;
       }
-      let h = t();
-      e.inner_promise = h;
-      let _ = this._acquire(e), n = this;
-      h.then(function(...l) {
-        n._release(_);
+      let inner_promise = fn();
+      running.inner_promise = inner_promise;
+      let index = this._acquire(running);
+      let self = this;
+      inner_promise.then(function(...result) {
+        self._release(index);
         try {
-          r.resolve(...l);
-        } catch (i) {
-          console.error(i);
+          connectors.resolve(...result);
+        } catch (e) {
+          console.error(e);
         }
-        l.length == 1 && typeof l[0] > "u" && (l = []);
-        let a = e.extra || [];
-        if (n._rolling !== null) {
-          let i = n._rolling.resolve;
-          if (typeof i < "u" && i !== null)
+        if (result.length == 1 && typeof result[0] === "undefined") {
+          result = [];
+        }
+        let extra2 = running.extra || [];
+        if (self._rolling !== null) {
+          let rolling_resolve = self._rolling.resolve;
+          if (typeof rolling_resolve != "undefined" && rolling_resolve !== null) {
             try {
-              i.apply(n, l.concat(a));
-            } catch (c) {
-              console.error(c);
+              rolling_resolve.apply(self, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
             }
-          n._rolling = null;
+          }
+          self._rolling = null;
         }
-        n._thens.forEach(function(i) {
+        self._thens.forEach(function(fn2) {
           try {
-            i.apply(n, l.concat(a));
-          } catch (c) {
-            console.error(c);
+            fn2.apply(self, result.concat(extra2));
+          } catch (e) {
+            console.error(e);
           }
-        }), n._finallys.forEach(function(i) {
+        });
+        self._finallys.forEach(function(fn2) {
           try {
-            i.apply(n, l.concat(a));
-          } catch (c) {
-            console.error(c);
+            fn2.apply(self, result.concat(extra2));
+          } catch (e) {
+            console.error(e);
           }
-        }), n._run();
-      }).catch(function(...l) {
-        n._release(_);
+        });
+        self._run();
+      }).catch(function(...result) {
+        self._release(index);
         try {
-          r.reject(...l);
-        } catch (i) {
-          console.error(i);
+          connectors.reject(...result);
+        } catch (e) {
+          console.error(e);
         }
-        l.length == 1 && typeof l[0] > "u" && (l = []);
-        let a = e.extra || [];
-        if (n._rolling !== null) {
-          let i = n._rolling.reject;
-          if (typeof i < "u" && i !== null)
+        if (result.length == 1 && typeof result[0] === "undefined") {
+          result = [];
+        }
+        let extra2 = running.extra || [];
+        if (self._rolling !== null) {
+          let rolling_reject = self._rolling.reject;
+          if (typeof rolling_reject != "undefined" && rolling_reject !== null) {
             try {
-              i.apply(n, l.concat(a));
-            } catch (c) {
-              console.error(c);
+              rolling_reject.apply(self, result.concat(extra2));
+            } catch (e) {
+              console.error(e);
             }
-          n._rolling = null;
+          }
+          self._rolling = null;
         }
-        n._catchs.forEach(function(i) {
+        self._catchs.forEach(function(fn2) {
           try {
-            i.apply(n, l.concat(a));
-          } catch (c) {
-            console.error(c);
+            fn2.apply(self, result.concat(extra2));
+          } catch (e) {
+            console.error(e);
           }
-        }), n._finallys.forEach(function(i) {
+        });
+        self._finallys.forEach(function(fn2) {
           try {
-            i.apply(n, l.concat(a));
-          } catch (c) {
-            console.error(c);
+            fn2.apply(self, result.concat(extra2));
+          } catch (e) {
+            console.error(e);
           }
-        }), n._run();
-      }), n._run();
+        });
+        self._run();
+      });
+      self._run();
     }
   }
   /**
@@ -312,50 +358,64 @@ class p {
    * Call registered callbacks (oncancel and finally).
    */
   _cancel_running() {
-    for (const e of Object.values(this._workers)) {
-      let t = e.inner_promise;
+    for (const action of Object.values(this._workers)) {
+      let promise = action.inner_promise;
       try {
-        typeof t.cancel == "function" ? t.cancel() : typeof t.abort == "function" && t.abort();
-      } catch (r) {
-        console.error(r);
+        if (typeof promise.cancel === "function") {
+          promise.cancel();
+        } else if (typeof promise.abort === "function") {
+          promise.abort();
+        }
+      } catch (e) {
+        console.error(e);
       }
-      this._cancel_action(e);
+      this._cancel_action(action);
     }
-    this._workers = {}, this._idle = /* @__PURE__ */ new Set(), [...Array(this._options.workers).keys()].map((e) => this._idle.add(e));
+    this._workers = {};
+    this._idle = /* @__PURE__ */ new Set();
+    [...Array(this._options.workers).keys()].map((x) => this._idle.add(x));
   }
   /**
    * Call the cancelled and finally callbacks for the action.
    */
-  _cancel_action(e) {
-    if (e.cancelled = !0, this._options.rejectCanceled)
+  _cancel_action(action) {
+    action.cancelled = true;
+    if (this._options.rejectCanceled) {
       try {
-        e.connectors.reject(new Error("Action was cancelled"));
-      } catch (s) {
-        console.error(s);
+        action.connectors.reject(new Error("Action was cancelled"));
+      } catch (e) {
+        console.error(e);
       }
-    let t = e.extra, r = this;
-    this._cancels.forEach(function(s) {
+    }
+    let extra = action.extra;
+    let self = this;
+    this._cancels.forEach(function(fn) {
       try {
-        s.apply(r, t);
-      } catch (o) {
-        console.error(o);
+        fn.apply(self, extra);
+      } catch (e) {
+        console.error(e);
       }
-    }), this._finallys.forEach(function(s) {
+    });
+    this._finallys.forEach(function(fn) {
       try {
-        s.apply(r, t);
-      } catch (o) {
-        console.error(o);
+        fn.apply(self, extra);
+      } catch (e) {
+        console.error(e);
       }
     });
   }
-  _acquire(e) {
-    let r = this._idle.values().next().value;
-    return this._idle.delete(r), this._workers[r] = e, r;
+  _acquire(item) {
+    let values = this._idle.values();
+    let result = values.next().value;
+    this._idle.delete(result);
+    this._workers[result] = item;
+    return result;
   }
-  _release(e) {
-    delete this._workers[e], this._idle.add(e);
+  _release(index) {
+    delete this._workers[index];
+    this._idle.add(index);
   }
 }
 export {
-  p as ActionQueue
+  ActionQueue
 };
