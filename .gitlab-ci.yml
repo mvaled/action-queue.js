@@ -7,7 +7,7 @@ run all tests:
   before_script:
     - yarn install
   script:
-    - yarn run test
+    - yarn run coverage
   cache:
     paths:
       - node_modules

@@ -1,4 +1,4 @@
-# A coordinated non-concurrent queue of actions
+# A coordinated queue of actions
 
 The class `ActionQueue` allows to create a FIFO, LIFO and replacement of
 actions.  An action is a function that returns a
