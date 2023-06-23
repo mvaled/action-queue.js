@@ -9,8 +9,5 @@ module.exports = defineConfig({
       fileName: (format) => `action-queue.${format}.js`
     }
   },
-  rollupOptions: {
-    external: ['underscore']
-  },
   clearScreen: false
 });
