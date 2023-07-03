@@ -14,7 +14,7 @@ build: yarn.lock node_modules src/index.js
 	@cp -f out/* dist/
 	@rm -rf out
 
-test: 
+test:
 	@yarn run test
 .PHONY: test
 
@@ -22,6 +22,3 @@ coverage:
 	@yarn run coverage
 .PHONY: coverage
 
-caddy: yarn.lock
-	@caddy file-server --browse --listen ':9999' --root .
-.PHONY: caddy
