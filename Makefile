@@ -22,3 +22,7 @@ coverage:
 	@yarn run coverage
 .PHONY: coverage
 
+publish: build
+	@yarn publish --access public
+.PHONY: coverage
+
