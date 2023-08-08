@@ -1,8 +1,10 @@
 PATH := ./node_modules/.bin/:$(PATH)
 
-node_modules yarn.lock: package.json
+install node_modules yarn.lock: package.json
 	@yarn install
 	@touch node_modules
+
+.PHONY: install
 
 run: yarn.lock node_modules
 	@vite

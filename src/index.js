@@ -249,15 +249,21 @@ export class ActionQueue {
      * Return an object with the running and pending jobs in the queue.
      *
      * The result is an object with two properties: 'running' and 'pending'.
-     * Each is an array of objects the a single property `args`; which is an
-     * array (possibly empty) with the extra arguments passed to `append`,
-     * `prepend` or `replace`.
+     * Each is an array of objects the properties:
+     *
+     *   - `args`; which is an array (possibly empty) with the extra arguments
+     *      passed to `append`, `prepend` or `replace`.
+     *
+     *   - `cancel`; a function that allows to cancel this particular action
+     *
+     *   - `promise`; the promise attached to this action (undefined if
+     *     `createPromises` is false).
      *
      */
     info() {
         let map = function(d) {
-            let {promise, extra} = d;
-            return {args: extra, cancel: d.cancel, promise: d.external_promise};
+            let {extra, cancel, external_promise} = d;
+            return {args: extra, cancel, promise: external_promise};
         }
 
         const workers = Object.values(this._workers);
@@ -395,10 +401,9 @@ export class ActionQueue {
      */
     _cancel_running() {
         for (const action of Object.values(this._workers)) {
-            // Some promises reject when cancelled, we let's avoid
-            // rejecting the queue's promise in such cases, because our
-            // API states that we won't reject the promise when cancelling
-            // an action.
+            // Some promises reject when cancelled, we avoid rejecting the
+            // queue's promise in such cases, because our API states that we
+            // won't reject the promise when cancelling an action.
             let promise = action.inner_promise;
             try {
                 if (typeof promise.cancel === "function") {
@@ -422,14 +427,6 @@ export class ActionQueue {
      */
     _cancel_action(action) {
         action.cancelled = true;
-        if (this._options.rejectCanceled) {
-            try {
-                action.connectors.reject(new Error("Action was cancelled"));
-            }
-            catch (e) {
-                console.error(e);
-            }
-        }
         let extra = action.extra;
         let self = this;
         this._cancels.forEach(function (fn) {
@@ -439,6 +436,14 @@ export class ActionQueue {
                 console.error(e);
             }
         });
+        if (this._options.rejectCanceled) {
+            try {
+                action.connectors.reject(new Error("Action was cancelled"));
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
         this._finallys.forEach(function (fn) {
             try {
                 fn.apply(self, extra);

@@ -64,7 +64,6 @@ action.   This is the same as calling `clear` and then `append`.
 
 Cancel all pending and running actions in the queue.
 
-
 ### `then(callback)`
 
 Register a callback to be called when any of the actions is completed
@@ -119,3 +118,42 @@ The only way this promise is resolved, is when the running action is resolved.
 
 When the same queue is used several times, calls to promise may return
 different promises.
+
+### `info()`
+
+Return an object with the running and pending jobs in the queue.
+
+The result is an object with two properties: `running` and `pending`.  Each
+contains an array of objects the properties:
+
+- `args`; which is an array (possibly empty) with the extra arguments passed
+  to `append`, `prepend` or `replace`.
+
+- `cancel`; a function that allows to cancel this particular action
+
+- `promise`; the promise attached to this action (undefined if
+  `createPromises` is false).
+
+### `busy()`
+
+Return True if the queue is busy, either running or has actions waiting.  This
+might True even if the queue is paused.
+
+
+### `pause()`
+
+Pause the queue.  This has no effect on the currently running action (if any);
+if we was running it will finish.  But no new actions are going to be
+executed.
+
+If the queue is already paused, do nothing.
+
+### `resume()`
+
+Resume the queue.  If the queue is not paused, do nothing.
+
+
+### `paused()`
+
+Return True if the queue is paused.
+
